@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"fmt"
 	"strings"
 	"strconv"
@@ -122,16 +123,22 @@ var replies = map[string]string{"403": "ERR_NOSUCHCHANNEL",
 						"256": "RPL_ADMINME",
 						"259": "RPL_ADMINEMAIL"}
 
+func (n *Network) Pass() os.Error {
+		n.queueOut <- fmt.Sprintf("PASS %s", n.password)
+		//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
+		return nil
+}
+
 func (n *Network) Nick(newnick string) string {
 	if newnick != "" {
 		//TODO: check for correct nick
 		n.nick = newnick
-		n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
-		//TODO: how do we check if the message is successful?
-		//replies:
-		//ERR_NONICKNAMEGIVEN             ERR_ERRONEUSNICKNAME
-		//ERR_NICKNAMEINUSE               ERR_NICKCOLLISION
 	}
+	n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
+	//TODO: how do we check if the message is successful?
+	//replies:
+	//ERR_NONICKNAMEGIVEN             ERR_ERRONEUSNICKNAME
+	//ERR_NICKNAMEINUSE               ERR_NICKCOLLISION
 	return n.nick
 }
 
@@ -140,6 +147,8 @@ func (n *Network) User(newuser string) string {
 		//TODO: can we change the user string once we are connected?
 		n.user = newuser
 	}
+	n.queueOut <- fmt.Sprintf("USER %s 0.0.0.0 0.0.0.0 :%s", n.user, n.realname)
+	//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
 	return n.user
 }
 

@@ -81,13 +81,10 @@ func (n *Network) Connect() os.Error {
 	go n.receiver()
 	go n.ponger()
 	if n.password != "" {
-		n.queueOut <- fmt.Sprintf("PASS %s", n.password)
-		//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
+		n.Pass()
 	}
-	n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
-	//TODO: use Nick(..)
-	n.queueOut <- fmt.Sprintf("USER %s 0.0.0.0 0.0.0.0 :%s", n.user, n.realname)
-	//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
+	n.nick = n.Nick(n.nick)
+	n.user = n.User(n.user)
 	return nil
 }
 
@@ -232,34 +229,51 @@ func (n *Network) DelListener(cmd, name string) os.Error {
 	n.listen[cmd][name] = nil
 	return nil
  }
-
-func main() {
+ 
+func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n := new(Network)
-	netf := flag.String("net", "viotest.local:6667", "Network name in the form of network.dom:port")
-	passf := flag.String("p", "", "Network Password")
-	nickf := flag.String("n", "go-ircfs", "Nickname on network")
-	userf := flag.String("u", "go-ircfs", "Irc user")
-	rnf := flag.String("r", "go-ircfs", "Real Name")
-	logfile := flag.String("l", "", "File used for logging (default: stderr)")
-	flag.Parse()
-	n.network = *netf
-	n.password = *passf
-	n.nick = *nickf
-	n.user = *userf
-	n.realname = *rnf
+	n.network = net
+	n.password = pass
+	n.nick = nick
+	n.user = usr
+	n.realname = rn
 	logflags := log.Ldate|log.Lmicroseconds|log.Llongfile
-	logprefix := n.network+" "
-	if *logfile == "" {
+	logprefix := fmt.Sprintf("%s ", n.network)
+	if logfp == "" {
 		n.l = log.New(os.Stderr, logprefix, logflags)
 	} else {
-		f, err := os.Open(*logfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+		f, err := os.Open(logfp, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 		if err != nil {
 			n.l = log.New(os.Stderr, logprefix, logflags)
-			n.l.Printf("Bad logfile: %s: %s\n", *logfile, err.String())
+			n.l.Printf("Bad logfile: %s: %s\n", logfp, err.String())
 		} else {
 			n.l = log.New(f, logprefix, logflags)
 		}
 	}
+	return n
+}
+
+func main() {
+	netf := flag.String("net", "viotest.local:6667", "Network name in the form of network.dom:port")
+	passf := flag.String("p", "", "Network Password")
+	nickf := flag.String("n", "go-ircfs", "Nickname on network")
+	userf := flag.String("u", "", "Irc user (defaults to nick)")
+	rnf := flag.String("r", "go-ircfs", "Real Name (defaults to nick)")
+	logfile := flag.String("l", "", "File used for logging (default: stderr)")
+	usage := flag.Bool("h", false, "Display usage and help message")
+	flag.Parse()
+	if *usage {
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
+	if *userf == "" {
+		userf = nickf
+	}
+	if *rnf == "" {
+		rnf = nickf
+	}
+
+	n := NewNetwork(*netf, *nickf, *userf, *rnf, *passf, *logfile)
 	err := n.Connect()
 	if err != nil {
 		n.l.Println(err.String())
