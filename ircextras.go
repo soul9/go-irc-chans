@@ -8,137 +8,183 @@ import (
 	"time"
 )
 //irc reply message types
-var replies = map[string]string{"403": "ERR_NOSUCHCHANNEL",
-						"404": "ERR_CANNOTSENDTOCHAN",
-						"405": "ERR_TOOMANYCHANNELS",
-						"406": "ERR_WASNOSUCHNICK",
-						"407": "ERR_TOOMANYTARGETS",
-						"409": "ERR_NOORIGIN",
-						"411": "ERR_NORECIPIENT",
-						"412": "ERR_NOTEXTTOSEND",
-						"413": "ERR_NOTOPLEVEL",
-						"414": "ERR_WILDTOPLEVEL",
-						"421": "ERR_UNKNOWNCOMMAND",
-						"422": "ERR_NOMOTD",
-						"423": "ERR_NOADMININFO",
-						"424": "ERR_FILEERROR",
-						"431": "ERR_NONICKNAMEGIVEN",
-						"432": "ERR_ERRONEUSNICKNAME",
-						"433": "ERR_NICKNAMEINUSE",
-						"436": "ERR_NICKCOLLISION",
-						"441": "ERR_USERNOTINCHANNEL",
-						"442": "ERR_NOTONCHANNEL",
-						"443": "ERR_USERONCHANNEL",
-						"444": "ERR_NOLOGIN",
-						"445": "ERR_SUMMONDISABLED",
-						"446": "ERR_USERSDISABLED",
-						"451": "ERR_NOTREGISTERED",
-						"461": "ERR_NEEDMOREPARAMS",
-						"462": "ERR_ALREADYREGISTRED",
-						"463": "ERR_NOPERMFORHOST",
-						"464": "ERR_PASSWDMISMATCH",
-						"465": "ERR_YOUREBANNEDCREEP",
-						"467": "ERR_KEYSET",
-						"471": "ERR_CHANNELISFULL",
-						"472": "ERR_UNKNOWNMODE",
-						"473": "ERR_INVITEONLYCHAN",
-						"474": "ERR_BANNEDFROMCHAN",
-						"475": "ERR_BADCHANNELKEY",
-						"481": "ERR_NOPRIVILEGES",
-						"482": "ERR_CHANOPRIVSNEEDED",
-						"483": "ERR_CANTKILLSERVER",
-						"491": "ERR_NOOPERHOST",
-						"501": "ERR_UMODEUNKNOWNFLAG",
-						"502": "ERR_USERSDONTMATCH",
-						"300": "RPL_NONE",
-						"302": "RPL_USERHOST",
-						"303": "RPL_ISON",
-						"301": "RPL_AWAY",
-						"305": "RPL_UNAWAY",
-						"306": "RPL_NOWAWAY",
-						"311": "RPL_WHOISUSER",
-						"312": "RPL_WHOISSERVER",
-						"313": "RPL_WHOISOPERATOR",
-						"317": "RPL_WHOISIDLE",
-						"318": "RPL_ENDOFWHOIS",
-						"319": "RPL_WHOISCHANNELS",
-						"314": "RPL_WHOWASUSER",
-						"369": "RPL_ENDOFWHOWAS",
-						"321": "RPL_LISTSTART",
-						"322": "RPL_LIST",
-						"323": "RPL_LISTEND",
-						"324": "RPL_CHANNELMODEIS",
-						"331": "RPL_NOTOPIC",
-						"332": "RPL_TOPIC",
-						"341": "RPL_INVITING",
-						"342": "RPL_SUMMONING",
-						"351": "RPL_VERSION",
-						"352": "RPL_WHOREPLY",
-						"315": "RPL_ENDOFWHO",
-						"353": "RPL_NAMREPLY",
-						"366": "RPL_ENDOFNAMES",
-						"364": "RPL_LINKS",
-						"365": "RPL_ENDOFLINKS",
-						"367": "RPL_BANLIST",
-						"368": "RPL_ENDOFBANLIST",
-						"371": "RPL_INFO",
-						"374": "RPL_ENDOFINFO",
-						"375": "RPL_MOTDSTART",
-						"372": "RPL_MOTD",
-						"376": "RPL_ENDOFMOTD",
-						"381": "RPL_YOUREOPER",
-						"382": "RPL_REHASHING",
-						"391": "RPL_TIME",
-						"392": "RPL_USERSSTART",
-						"393": "RPL_USERS",
-						"394": "RPL_ENDOFUSERS",
-						"395": "RPL_NOUSERS",
-						"200": "RPL_TRACELINK",
-						"201": "RPL_TRACECONNECTING",
-						"202": "RPL_TRACEHANDSHAKE",
-						"203": "RPL_TRACEUNKNOWN",
-						"204": "RPL_TRACEOPERATOR",
-						"205": "RPL_TRACEUSER",
-						"206": "RPL_TRACESERVER",
-						"208": "RPL_TRACENEWTYPE",
-						"261": "RPL_TRACELOG",
-						"211": "RPL_STATSLINKINFO",
-						"212": "RPL_STATSCOMMANDS",
-						"213": "RPL_STATSCLINE",
-						"214": "RPL_STATSNLINE",
-						"215": "RPL_STATSILINE",
-						"216": "RPL_STATSKLINE",
-						"218": "RPL_STATSYLINE",
-						"219": "RPL_ENDOFSTATS",
-						"241": "RPL_STATSLLINE",
-						"242": "RPL_STATSUPTIME",
-						"243": "RPL_STATSOLINE",
-						"244": "RPL_STATSHLINE",
-						"221": "RPL_UMODEIS",
-						"251": "RPL_LUSERCLIENT",
-						"252": "RPL_LUSEROP",
-						"253": "RPL_LUSERUNKNOWN",
-						"254": "RPL_LUSERCHANNELS",
-						"255": "RPL_LUSERME",
-						"256": "RPL_ADMINME",
-						"259": "RPL_ADMINEMAIL"}
+var replies = map[string]string{"ERR_NOSUCHCHANNEL": "403",
+	"ERR_CANNOTSENDTOCHAN": "404",
+	"ERR_TOOMANYCHANNELS":  "405",
+	"ERR_WASNOSUCHNICK":    "406",
+	"ERR_TOOMANYTARGETS":   "407",
+	"ERR_NOORIGIN":         "409",
+	"ERR_NORECIPIENT":      "411",
+	"ERR_NOTEXTTOSEND":     "412",
+	"ERR_NOTOPLEVEL":       "413",
+	"ERR_WILDTOPLEVEL":     "414",
+	"ERR_UNKNOWNCOMMAND":   "421",
+	"ERR_NOMOTD":           "422",
+	"ERR_NOADMININFO":      "423",
+	"ERR_FILEERROR":        "424",
+	"ERR_NONICKNAMEGIVEN":  "431",
+	"ERR_ERRONEUSNICKNAME": "432",
+	"ERR_NICKNAMEINUSE":    "433",
+	"ERR_NICKCOLLISION":    "436",
+	"ERR_USERNOTINCHANNEL": "441",
+	"ERR_NOTONCHANNEL":     "442",
+	"ERR_USERONCHANNEL":    "443",
+	"ERR_NOLOGIN":          "444",
+	"ERR_SUMMONDISABLED":   "445",
+	"ERR_USERSDISABLED":    "446",
+	"ERR_NOTREGISTERED":    "451",
+	"ERR_NEEDMOREPARAMS":   "461",
+	"ERR_ALREADYREGISTRED": "462",
+	"ERR_NOPERMFORHOST":    "463",
+	"ERR_PASSWDMISMATCH":   "464",
+	"ERR_YOUREBANNEDCREEP": "465",
+	"ERR_KEYSET":           "467",
+	"ERR_CHANNELISFULL":    "471",
+	"ERR_UNKNOWNMODE":      "472",
+	"ERR_INVITEONLYCHAN":   "473",
+	"ERR_BANNEDFROMCHAN":   "474",
+	"ERR_BADCHANNELKEY":    "475",
+	"ERR_NOPRIVILEGES":     "481",
+	"ERR_CHANOPRIVSNEEDED": "482",
+	"ERR_CANTKILLSERVER":   "483",
+	"ERR_NOOPERHOST":       "491",
+	"ERR_UMODEUNKNOWNFLAG": "501",
+	"ERR_USERSDONTMATCH":   "502",
+	"RPL_NONE":             "300",
+	"RPL_USERHOST":         "302",
+	"RPL_ISON":             "303",
+	"RPL_AWAY":             "301",
+	"RPL_UNAWAY":           "305",
+	"RPL_NOWAWAY":          "306",
+	"RPL_WHOISUSER":        "311",
+	"RPL_WHOISSERVER":      "312",
+	"RPL_WHOISOPERATOR":    "313",
+	"RPL_WHOISIDLE":        "317",
+	"RPL_ENDOFWHOIS":       "318",
+	"RPL_WHOISCHANNELS":    "319",
+	"RPL_WHOWASUSER":       "314",
+	"RPL_ENDOFWHOWAS":      "369",
+	"RPL_LISTSTART":        "321",
+	"RPL_LIST":             "322",
+	"RPL_LISTEND":          "323",
+	"RPL_CHANNELMODEIS":    "324",
+	"RPL_NOTOPIC":          "331",
+	"RPL_TOPIC":            "332",
+	"RPL_INVITING":         "341",
+	"RPL_SUMMONING":        "342",
+	"RPL_VERSION":          "351",
+	"RPL_WHOREPLY":         "352",
+	"RPL_ENDOFWHO":         "315",
+	"RPL_NAMREPLY":         "353",
+	"RPL_ENDOFNAMES":       "366",
+	"RPL_LINKS":            "364",
+	"RPL_ENDOFLINKS":       "365",
+	"RPL_BANLIST":          "367",
+	"RPL_ENDOFBANLIST":     "368",
+	"RPL_INFO":             "371",
+	"RPL_ENDOFINFO":        "374",
+	"RPL_MOTDSTART":        "375",
+	"RPL_MOTD":             "372",
+	"RPL_ENDOFMOTD":        "376",
+	"RPL_YOUREOPER":        "381",
+	"RPL_REHASHING":        "382",
+	"RPL_TIME":             "391",
+	"RPL_USERSSTART":       "392",
+	"RPL_USERS":            "393",
+	"RPL_ENDOFUSERS":       "394",
+	"RPL_NOUSERS":          "395",
+	"RPL_TRACELINK":        "200",
+	"RPL_TRACECONNECTING":  "201",
+	"RPL_TRACEHANDSHAKE":   "202",
+	"RPL_TRACEUNKNOWN":     "203",
+	"RPL_TRACEOPERATOR":    "204",
+	"RPL_TRACEUSER":        "205",
+	"RPL_TRACESERVER":      "206",
+	"RPL_TRACENEWTYPE":     "208",
+	"RPL_TRACELOG":         "261",
+	"RPL_STATSLINKINFO":    "211",
+	"RPL_STATSCOMMANDS":    "212",
+	"RPL_STATSCLINE":       "213",
+	"RPL_STATSNLINE":       "214",
+	"RPL_STATSILINE":       "215",
+	"RPL_STATSKLINE":       "216",
+	"RPL_STATSYLINE":       "218",
+	"RPL_ENDOFSTATS":       "219",
+	"RPL_STATSLLINE":       "241",
+	"RPL_STATSUPTIME":      "242",
+	"RPL_STATSOLINE":       "243",
+	"RPL_STATSHLINE":       "244",
+	"RPL_UMODEIS":          "221",
+	"RPL_LUSERCLIENT":      "251",
+	"RPL_LUSEROP":          "252",
+	"RPL_LUSERUNKNOWN":     "253",
+	"RPL_LUSERCHANNELS":    "254",
+	"RPL_LUSERME":          "255",
+	"RPL_ADMINME":          "256",
+	"RPL_ADMINEMAIL":                  "259"}
 
+const timeout = 1000 * 1000 * 1000 * 5  //timeout of 5 seconds
 func (n *Network) Pass() os.Error {
-		n.queueOut <- fmt.Sprintf("PASS %s", n.password)
-		//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
-		return nil
+	t := strconv.Itoa64(time.Nanoseconds())
+	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}
+	var err os.Error
+	repch := make(chan IrcMessage)
+	for _, rep := range myreplies {
+		if err := n.RegListener(replies[rep], t, repch); err != nil {
+			err = os.NewError(fmt.Sprintf("Couldn't authenticate with password, exiting: %s", err.String()))
+		}
+	}
+	n.queueOut <- fmt.Sprintf("PASS %s", n.password)
+	ticker := time.NewTicker(timeout) //timeout in 5 seconds
+	select {
+	case msg := <-repch:
+		if msg.Cmd == replies["ERR_NEEDMOREPARAMS"] {
+			err = os.NewError(fmt.Sprintf("Need more parameters for password: %s", msg.String()))
+		}
+		break
+	case <-ticker.C:
+		break
+	}
+	ticker.Stop()
+	for _, rep := range myreplies {
+		n.DelListener(replies[rep], "pwdreply")
+	}
+	//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
+	return err
 }
 
 func (n *Network) Nick(newnick string) string {
-	if newnick != "" {
-		//TODO: check for correct nick
-		n.nick = newnick
+	t := strconv.Itoa64(time.Nanoseconds())
+	myreplies := []string{"ERR_NONICKNAMEGIVEN", "ERR_ERRONEUSNICKNAME", "ERR_NICKNAMEINUSE", "ERR_NICKCOLLISION"}
+	if newnick == "" && n.nick == "" {
+		n.nick = "go-ircfs"
 	}
+	//TODO: check for correct nick
+	if len(newnick) > 9 {
+		newnick = newnick[:8]
+	}
+	n.nick = newnick
+	repch := make(chan IrcMessage)
+	for _, rep := range myreplies {
+		if err := n.RegListener(replies[rep], t, repch); err != nil {
+			n.l.Printf("Couldn't register nick %s: %s", n.nick, err.String())
+			os.Exit(1)
+		}
+	}
+	ticker := time.NewTicker(timeout) //timeout in 5 seconds
 	n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
-	//TODO: how do we check if the message is successful?
-	//replies:
-	//ERR_NONICKNAMEGIVEN             ERR_ERRONEUSNICKNAME
-	//ERR_NICKNAMEINUSE               ERR_NICKCOLLISION
+	select {
+	case msg := <-repch:
+		if msg.Cmd == replies["ERR_ERRONEUSNICKNAME"] || msg.Cmd == replies["ERR_NICKNAMEINUSE"] || msg.Cmd == replies["ERR_NICKCOLLISION"] {
+			n.nick = n.Nick(fmt.Sprintf("_%s", n.nick))
+		}
+	case <-ticker.C:
+		break
+	}
+	ticker.Stop()
+	for _, rep := range myreplies {
+		n.DelListener(replies[rep], "nickreply")
+	}
 	return n.nick
 }
 
@@ -161,7 +207,7 @@ func (n *Network) Realname(newrn string) string {
 	return n.realname
 }
 
-func (n *Network) NetName(newname string) string{
+func (n *Network) NetName(newname string) string {
 	if newname != "" {
 		n.network = newname
 		//TODO: reconnect
@@ -184,7 +230,7 @@ func (n *Network) Quit(reason string) {
 
 func (n *Network) Join(chans []string, keys []string) {
 	for _, ch := range chans {
-		if ! strings.HasPrefix(ch, "#") && ! strings.HasPrefix(ch, "&") && ! strings.HasPrefix(ch, "+") && ! strings.HasPrefix(ch, "!") {
+		if !strings.HasPrefix(ch, "#") && !strings.HasPrefix(ch, "&") && !strings.HasPrefix(ch, "+") && !strings.HasPrefix(ch, "!") {
 			n.l.Printf("Channel %s doesn't start with a legal prefix, returning prematurely", ch)
 			return
 		}
@@ -212,8 +258,8 @@ func (n *Network) Part(chans []string) {
 }
 
 func (n *Network) Mode(target, mode, params string) {
-	chmodes := []byte{'o','p','s','i','t','n','m','l','b','v','k'}
-	usrmodes := []byte{'i','s','w','o'}
+	chmodes := []byte{'o', 'p', 's', 'i', 't', 'n', 'm', 'l', 'b', 'v', 'k'}
+	usrmodes := []byte{'i', 's', 'w', 'o'}
 	ok := false
 	for _, c := range mode {
 		found := false
@@ -268,14 +314,14 @@ func (n *Network) Topic(ch, topic string) {
 	return
 }
 
-func (n *Network) Names(chans []string){
+func (n *Network) Names(chans []string) {
 	n.queueOut <- fmt.Sprintf("NAMES %s", strings.Join(chans, ","))
 	//TODO: replies:
 	//RPL_NAMREPLY                    RPL_ENDOFNAMES
 	return
 }
 
-func (n *Network) List(chans []string, server string){
+func (n *Network) List(chans []string, server string) {
 	raw := "LIST"
 	if len(chans) > 0 {
 		raw += fmt.Sprintf(" %s", strings.Join(chans, ","))
@@ -290,7 +336,7 @@ func (n *Network) List(chans []string, server string){
 	return
 }
 
-func (n *Network) Invite(target, ch string){
+func (n *Network) Invite(target, ch string) {
 	n.queueOut <- fmt.Sprintf("INVITE %s %s", target, ch)
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              ERR_NOSUCHNICK
@@ -373,7 +419,7 @@ func (n *Network) Whowas(target string, count int, server string) {
 	return
 }
 
-func (n *Network) PingNick(nick string){
+func (n *Network) PingNick(nick string) {
 	n.queueOut <- fmt.Sprintf("PING %s", nick)
 	//TODO: replies:
 	//ERR_NOORIGIN                    ERR_NOSUCHSERVER
@@ -426,10 +472,10 @@ func (n *Network) Userhost(users []string) {
 }
 
 func (n *Network) Ison(users []string) {
-	if len(users) > 53 {  //maximum number of nicks: 512/9 9 is max length of a nick
+	if len(users) > 53 { //maximum number of nicks: 512/9 9 is max length of a nick
 		return
 	}
-	n.queueOut <-  fmt.Sprintf("ISON %s", strings.Join(users, " "))
+	n.queueOut <- fmt.Sprintf("ISON %s", strings.Join(users, " "))
 	//TODO: replies
 	//RPL_ISON                ERR_NEEDMOREPARAMS
 	return
