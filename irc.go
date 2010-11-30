@@ -170,7 +170,11 @@ func (n *Network) ctcp() {
 			case  ctype == "CLIENTINFO":
 				n.Notice(dst, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO\x01")
 			case  ctype[0:4] == "PING":
-				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Split(p.Params[1], " ", -1)[1]))
+				params := strings.Split(p.Params[1], " ", -1)
+				if len(params) < 2 {
+					n.l.Println("Illegal ctcp ping received: No arguments", p)
+				}
+				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", params[1]))
 			case  ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
 			}
