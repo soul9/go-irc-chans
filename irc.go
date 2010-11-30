@@ -160,18 +160,19 @@ func (n *Network) ctcp() {
 		p := <-ch
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1{
 			ctype := p.Params[1][2:i]
-			n.l.Println("recvd CTCP type", ctype)
+			dst := strings.Split(p.Prefix, "!", -1)[0]
+			n.l.Println("recvd CTCP", p)
 			switch {
 			case  ctype == "VERSION":
-				n.Notice(p.Prefix, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
+				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
 			case  ctype== "USERINFO":
-				n.Notice(p.Prefix, fmt.Sprintf("\x01USERINFO %s\x01", n.user))
+				n.Notice(dst, fmt.Sprintf("\x01USERINFO %s\x01", n.user))
 			case  ctype == "CLIENTINFO":
-				n.Notice(p.Prefix, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO\x01")
+				n.Notice(dst, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO\x01")
 			case  ctype[0:4] == "PING":
-				n.Notice(p.Prefix, fmt.Sprintf("\x01PING %s\x01", strings.Split(p.Params[1], " ", -1)[1][1:]))
+				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Split(p.Params[1], " ", -1)[1][1:]))
 			case  ctype == "TIME":
-				n.Notice(p.Prefix, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
+				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
 			}
 		}
 	}
@@ -205,7 +206,6 @@ func (n *Network) receiver() {
 			}
 			return
 		}()
-		n.l.Printf("Message received: %s msg: %#v", l, msg)
 	}
 	n.done <- true
 	return
