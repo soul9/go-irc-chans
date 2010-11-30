@@ -110,7 +110,7 @@ func (n *Network) sender() {
 			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
 			break
 		}
-		n.l.Printf("Message sent: %s\n", msg)
+		n.l.Printf(">>> %s\n", msg)
 	}
 	n.done <- true
 	return
@@ -146,6 +146,7 @@ func (n *Network) ponger() {
 	n.RegListener("PING", "ponger", pingch)
 	for !closed(pingch) {
 		p := <-pingch
+		n.l.Printf("<<< %#v", p)
 		n.Pong(p.Params[0])
 	}
 	n.l.Println("Something bad happened, ponger returning")
@@ -153,6 +154,7 @@ func (n *Network) ponger() {
 	return
 }
 
+//CTCP sucks, each client implements it a bit differently
 func (n *Network) ctcp() {
 	ch := make(chan IrcMessage)
 	n.RegListener("PRIVMSG", "ctcp", ch)
@@ -161,7 +163,7 @@ func (n *Network) ctcp() {
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1{
 			ctype := p.Params[1][2:i]
 			dst := strings.Split(p.Prefix, "!", -1)[0]
-			n.l.Println("recvd CTCP", p)
+			n.l.Println("<<< CTCP", p)
 			switch {
 			case  ctype == "VERSION":
 				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
@@ -173,8 +175,9 @@ func (n *Network) ctcp() {
 				params := strings.Split(p.Params[1], " ", -1)
 				if len(params) < 2 {
 					n.l.Println("Illegal ctcp ping received: No arguments", p)
+					break
 				}
-				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", params[1]))
+				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
 			case  ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
 			}
@@ -312,8 +315,8 @@ func main() {
 		n.l.Println(err.String())
 		os.Exit(1)
 	}
-	n.Join([]string{"#soul9", "#ubuntu", "#t"}, []string{})
-	go func(){
+	n.Join([]string{"#soul9"}, []string{})
+/*	go func(){
 		chin := make(chan IrcMessage, 100)
 		n.RegListener("PRIVMSG", "testreply", chin)
 		for !closed(chin) {
@@ -325,6 +328,7 @@ func main() {
 			}
 		}
 	}()
+*/
 	<-n.done
 	os.Exit(0)
 }
