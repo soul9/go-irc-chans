@@ -183,6 +183,7 @@ func (n *Network) ctcp() {
 				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
 			case  ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
+			//TODO: ACTION, FINGER, SOURCE, PAGE?
 			}
 		}
 	}
