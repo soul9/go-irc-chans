@@ -128,7 +128,7 @@ func (n *Network) Pass() os.Error {
 	t := strconv.Itoa64(time.Nanoseconds())
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}
 	var err os.Error
-	repch := make(chan IrcMessage)
+	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
 		if err := n.RegListener(replies[rep], t, repch); err != nil {
 			err = os.NewError(fmt.Sprintf("Couldn't authenticate with password, exiting: %s", err.String()))
@@ -164,7 +164,7 @@ func (n *Network) Nick(newnick string) string {
 		newnick = newnick[:8]
 	}
 	n.nick = newnick
-	repch := make(chan IrcMessage)
+	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
 		if err := n.RegListener(replies[rep], t, repch); err != nil {
 			n.l.Printf("Couldn't register nick %s: %s", n.nick, err.String())

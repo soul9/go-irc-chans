@@ -30,7 +30,7 @@ type Network struct {
 	done              chan bool
 	buf               *bufio.ReadWriter
 	ticker1, ticker15 <-chan int64
-	listen            map[string]map[string]chan IrcMessage //wildcard * is for any message
+	listen            map[string]map[string]chan *IrcMessage //wildcard * is for any message
 }
 
 type IrcMessage struct {
@@ -63,7 +63,7 @@ func (n *Network) Connect() os.Error {
 	if n.user == "" || n.nick == "" || n.realname == "" {
 		return os.NewError("Empty nick and/or user and/or real name")
 	}
-	n.listen = make(map[string]map[string]chan IrcMessage)
+	n.listen = make(map[string]map[string]chan *IrcMessage)
 	n.l.Printf("Connecting to irc network %s.\n", n.network)
 	var err os.Error
 	n.conn, err = net.Dial("tcp", "", n.network)
@@ -76,10 +76,12 @@ func (n *Network) Connect() os.Error {
 	n.done = make(chan bool)
 	n.queueOut = make(chan string, 100)
 	n.queueIn = make(chan string, 100)
+	n.ticker1 = time.Tick(1000 * 1000 * 1000 * 60 * 1)   //Tick every minute.
+	n.ticker15 = time.Tick(1000 * 1000 * 1000 * 60 * 15) //Tick every 15 minutes.
 	go n.sender()
-	go n.pinger()
+	go n.pinger(nil)
 	go n.receiver()
-	go n.ponger()
+	go n.ponger(nil)
 	go n.ctcp()
 	if n.password != "" {
 		n.Pass()
@@ -90,73 +92,75 @@ func (n *Network) Connect() os.Error {
 }
 
 func (n *Network) sender() {
-	for {
-		if n.conn == nil {
-			n.l.Println("socket closed, returning from sender()")
-			break
-		}
-		if closed(n.queueOut) {
-			n.l.Println("queueOut closed, returning from sender()")
-			break
-		}
-		msg := <-n.queueOut
-		_, err := n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
-		if err != nil {
-			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-			break
-		}
-		err = n.buf.Flush()
-		if err != nil {
-			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-			break
-		}
-		n.l.Printf(">>> %s\n", msg)
+	if n.conn == nil {
+		n.l.Println("socket closed, returning from sender()")
+		n.done <- true
+		return
 	}
-	n.done <- true
-	return
+	if closed(n.queueOut) {
+		n.l.Println("queueOut closed, returning from sender()")
+		n.done <- true
+		return
+	}
+	msg := <-n.queueOut
+	_, err := n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
+	if err != nil {
+		n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
+		n.done <- true
+		return
+	}
+	err = n.buf.Flush()
+	if err != nil {
+		n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
+		n.done <- true
+		return
+	}
+	n.l.Printf(">>> %s\n", msg)
+	n.sender()
 }
 
-func (n *Network) pinger() {
-	n.ticker1 = time.Tick(1000 * 1000 * 1000 * 60 * 1)   //Tick every minute.
-	n.ticker15 = time.Tick(1000 * 1000 * 1000 * 60 * 15) //Tick every 15 minutes.
-	tick := make(chan IrcMessage)
-	n.RegListener("*", "ticker", tick)
+func (n *Network) pinger(tick chan *IrcMessage) {
+	if tick == nil {
+		tick = make(chan *IrcMessage)
+		n.RegListener("*", "ticker", tick)
+	}
 	var lastMessage int64
-	for {
-		select {
-		case <-n.ticker1:
-			n.l.Println("Ticked 1 minute")
-			if time.Seconds()-lastMessage >= 60*4 {
-				n.Ping()
-			}
-		case <-n.ticker15:
-			//Ping every 15 minutes.
-			n.l.Println("Ticked 15 minutes")
+	select {
+	case <-n.ticker1:
+		n.l.Println("Ticked 1 minute")
+		if time.Seconds()-lastMessage >= 60*4 {
 			n.Ping()
-		case <-tick:
-			n.l.Println("Don't tick for 4 minutes")
-			lastMessage = time.Seconds()
 		}
+	case <-n.ticker15:
+		//Ping every 15 minutes.
+		n.l.Println("Ticked 15 minutes")
+		n.Ping()
+	case <-tick:
+		n.l.Println("Don't tick for 4 minutes")
+		lastMessage = time.Seconds()
 	}
-	return
+	n.pinger(tick)
 }
 
-func (n *Network) ponger() {
-	pingch := make(chan IrcMessage)
-	n.RegListener("PING", "ponger", pingch)
-	for !closed(pingch) {
-		p := <-pingch
-		n.l.Printf("<<< %#v", p)
-		n.Pong(p.Params[0])
+func (n *Network) ponger(pingch chan *IrcMessage) {
+	if pingch == nil {
+		pingch = make(chan *IrcMessage)
+		n.RegListener("PING", "ponger", pingch)
 	}
-	n.l.Println("Something bad happened, ponger returning")
-	n.DelListener("PING", "ponger")
-	return
+	p := <-pingch
+	if p == nil {
+		n.l.Println("Something bad happened, ponger returning")
+		n.DelListener("PING", "ponger")
+		return
+	}
+	n.l.Printf("<<< %#v", p)
+	n.Pong(p.Params[0])
+	n.ponger(pingch)
 }
 
 //CTCP sucks, each client implements it a bit differently
 func (n *Network) ctcp() {
-	ch := make(chan IrcMessage)
+	ch := make(chan *IrcMessage)
 	n.RegListener("PRIVMSG", "ctcp", ch)
 	for !closed(ch) {
 		p := <-ch
@@ -183,39 +187,40 @@ func (n *Network) ctcp() {
 			}
 		}
 	}
-	n.l.Println("Something bad happened, ponger returning")
+	n.l.Println("Something bad happened, ctcp returning")
 	n.DelListener("PRIVMSG", "ctcp")
 	return
 }
 
 func (n *Network) receiver() {
 	for {
-		if n.conn == nil {
-			n.l.Println("Can't receive on socket: socket disconnected")
-			break
-		}
-		l, err := n.buf.ReadString('\n')
-		if err != nil {
-			n.l.Println("Can't receive on socket: ", err.String())
-			break
-		}
-		l = strings.TrimRight(l, "\r\n")
-		msg := PackMsg(l)
-		//dispatch
-		go func() {
-			for na, ch := range n.listen[msg.Cmd] {
-				n.l.Printf("Delivering msg to %s", na)
-				ch <- msg
-			}
-			for na, ch := range n.listen["*"] {
-				n.l.Printf("Delivering msg to %s", na)
-				ch <- msg
-			}
-			return
-		}()
+	if n.conn == nil {
+		n.l.Println("Can't receive on socket: socket disconnected")
+		n.done <- true
+		return
 	}
-	n.done <- true
-	return
+	l, err := n.buf.ReadString('\n')
+	if err != nil {
+		n.l.Println("Can't receive on socket: ", err.String())
+		n.done <- true
+		return
+	}
+	l = strings.TrimRight(l, "\r\n")
+	msg := PackMsg(l)
+	//dispatch
+	go func() {
+		for na, ch := range n.listen[msg.Cmd] {
+			n.l.Printf("Delivering msg to %s", na)
+			ch <- &msg
+		}
+		for na, ch := range n.listen["*"] {
+			n.l.Printf("Delivering msg to %s", na)
+			ch <- &msg
+		}
+		return
+	}()
+	}
+	n.receiver()
 }
 
 func PackMsg(msg string) IrcMessage {
@@ -243,9 +248,9 @@ func PackMsg(msg string) IrcMessage {
 	return ret
 }
 
-func (n *Network) RegListener(cmd, name string, ch chan IrcMessage) os.Error {
+func (n *Network) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
 	if _, ok := n.listen[cmd]; !ok {
-		n.listen[cmd] = make(map[string]chan IrcMessage)
+		n.listen[cmd] = make(map[string]chan *IrcMessage)
 	} else if _, ok := n.listen[cmd][name]; ok {
 		return os.NewError(fmt.Sprintf("Can't register listener %s for cmd %s: already listening", name, cmd))
 	}
@@ -317,7 +322,7 @@ func main() {
 	}
 	n.Join([]string{"#soul9"}, []string{})
 /*	go func(){
-		chin := make(chan IrcMessage, 100)
+		chin := make(chan *IrcMessage, 100)
 		n.RegListener("PRIVMSG", "testreply", chin)
 		for !closed(chin) {
 			msg := <- chin
