@@ -79,7 +79,7 @@ func (n *Network) Connect() os.Error {
 	n.ticker1 = time.Tick(1000 * 1000 * 1000 * 60 * 1)   //Tick every minute.
 	n.ticker15 = time.Tick(1000 * 1000 * 1000 * 60 * 15) //Tick every 15 minutes.
 	go n.sender()
-	go n.pinger(nil)
+	go n.pinger(nil, 0)
 	go n.receiver()
 	go n.ponger(nil)
 	go n.ctcp()
@@ -119,12 +119,11 @@ func (n *Network) sender() {
 	n.sender()
 }
 
-func (n *Network) pinger(tick chan *IrcMessage) {
+func (n *Network) pinger(tick chan *IrcMessage, lastMessage int64) {
 	if tick == nil {
 		tick = make(chan *IrcMessage)
 		n.RegListener("*", "ticker", tick)
 	}
-	var lastMessage int64
 	select {
 	case <-n.ticker1:
 		n.l.Println("Ticked 1 minute")
@@ -139,7 +138,7 @@ func (n *Network) pinger(tick chan *IrcMessage) {
 		n.l.Println("Don't tick for 4 minutes")
 		lastMessage = time.Seconds()
 	}
-	n.pinger(tick)
+	n.pinger(tick, lastMessage)
 }
 
 func (n *Network) ponger(pingch chan *IrcMessage) {
