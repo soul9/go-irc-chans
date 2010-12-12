@@ -77,8 +77,8 @@ func (n *Network) Connect() os.Error {
 	go n.overlook()
 	go n.sender()
 	go n.receiver()
-	go n.pinger(nil, 0)
-	go n.ponger(nil)
+	go n.pinger()
+	go n.ponger()
 	go n.ctcp()
 	if n.password != "" {
 		n.Pass()
@@ -96,69 +96,76 @@ func (n *Network) overlook() {
 }
 
 func (n *Network) sender() {
-	if n.conn == nil {
-		n.l.Println("socket closed, returning from sender()")
-		n.done <- true
-		return
-	}
-	if closed(n.queueOut) {
-		n.l.Println("queueOut closed, returning from sender()")
-		n.done <- true
-		return
-	}
-	msg := <-n.queueOut
-	_, err := n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
-	if err != nil {
-		n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-		n.done <- true
-		return
-	}
-	err = n.buf.Flush()
-	if err != nil {
-		n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-		n.done <- true
-		return
-	}
-	n.l.Printf(">>> %s\n", msg)
-	n.sender()
-}
-
-func (n *Network) pinger(tick chan *IrcMessage, lastMessage int64) {
-	if tick == nil {
-		tick = make(chan *IrcMessage)
-		n.RegListener("*", "ticker", tick)
-	}
-	select {
-	case <-n.ticker1:
-		n.l.Println("Ticked 1 minute")
-		if time.Seconds()-lastMessage >= 60*4 {
-			n.Ping()
+	var err os.Error
+	for err == nil {
+		if n.conn == nil {
+			n.l.Println("socket closed, returning from sender()")
+			n.done <- true
+			return
 		}
-	case <-n.ticker15:
-		//Ping every 15 minutes.
-		n.l.Println("Ticked 15 minutes")
-		n.Ping()
-	case <-tick:
-		n.l.Println("Don't tick for 4 minutes")
-		lastMessage = time.Seconds()
+		if closed(n.queueOut) {
+			n.l.Println("queueOut closed, returning from sender()")
+			n.done <- true
+			return
+		}
+		msg := <-n.queueOut
+		_, err := n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
+		if err != nil {
+			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
+			n.done <- true
+			return
+		}
+		err = n.buf.Flush()
+		if err != nil {
+			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
+			n.done <- true
+			return
+		}
+		n.l.Printf(">>> %s\n", msg)
 	}
-	n.pinger(tick, lastMessage)
+	n.l.Println("Something went terribly wrong, sender exiting")
+	return
 }
 
-func (n *Network) ponger(pingch chan *IrcMessage) {
-	if pingch == nil {
-		pingch = make(chan *IrcMessage)
-		n.RegListener("PING", "ponger", pingch)
+func (n *Network) pinger() {
+	tick := make(chan *IrcMessage)
+	var lastMessage int64
+	n.RegListener("*", "ticker", tick)
+	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
+		select {
+		case <-n.ticker1:
+			n.l.Println("Ticked 1 minute")
+			if time.Seconds()-lastMessage >= 60*4 {
+				n.Ping()
+			}
+		case <-n.ticker15:
+			//Ping every 15 minutes.
+			n.l.Println("Ticked 15 minutes")
+			n.Ping()
+		case <-tick:
+			n.l.Println("Don't tick for 4 minutes")
+			lastMessage = time.Seconds()
+		}
 	}
-	p := <-pingch
-	if p == nil {
-		n.l.Println("Something bad happened, ponger returning")
-		n.DelListener("PING", "ponger")
-		return
+	n.l.Println("Something went terribly wrong, pinger exiting")
+	n.DelListener("*", "ticker")  //close channel and delete listener
+	return
+}
+
+func (n *Network) ponger() {
+	pingch := make(chan *IrcMessage)
+	n.RegListener("PING", "ponger", pingch)
+	for !closed(pingch) {
+		p := <-pingch
+		if p == nil {
+			n.l.Println("Something bad happened, ponger returning")
+			n.DelListener("PING", "ponger")
+			return
+		}
+		n.Pong(p.Params[0])
 	}
-	n.l.Printf("<<< %#v", p)
-	n.Pong(p.Params[0])
-	n.ponger(pingch)
+	n.l.Println("Something went terribly wrong, ponger exiting")
+	return
 }
 
 //CTCP sucks, each client implements it a bit differently
@@ -197,33 +204,37 @@ func (n *Network) ctcp() {
 }
 
 func (n *Network) receiver() {
-	if n.conn == nil {
-		n.l.Println("Can't receive on socket: socket disconnected")
-		n.done <- true
-		return
-	}
-	l, err := n.buf.ReadString('\n')
-	if err != nil {
-		n.l.Println("Can't receive on socket: ", err.String())
-		n.done <- true
-		return
-	}
-	l = strings.TrimRight(l, "\r\n")
-	msg := PackMsg(l)
-	n.l.Printf("<<< %#v", msg)
-	//dispatch
-	go func() {
-		for na, ch := range n.listen[msg.Cmd] {
-			n.l.Printf("Delivering msg to %s", na)
-			ch <- &msg
+	var err os.Error
+	for err == nil {
+		if n.conn == nil {
+			n.l.Println("Can't receive on socket: socket disconnected")
+			n.done <- true
+			return
 		}
-		for na, ch := range n.listen["*"] {
-			n.l.Printf("Delivering msg to %s", na)
-			ch <- &msg
+		l, err := n.buf.ReadString('\n')
+		if err != nil {
+			n.l.Println("Can't receive on socket: ", err.String())
+			n.done <- true
+			return
 		}
-		return
-	}()
-	n.receiver()
+		l = strings.TrimRight(l, "\r\n")
+		msg := PackMsg(l)
+		//dispatch
+		go func() {
+			for na, ch := range n.listen[msg.Cmd] {
+				n.l.Printf("Delivering msg to %s", na)
+				ch <- &msg
+			}
+			for na, ch := range n.listen["*"] {
+				n.l.Printf("Delivering msg to %s", na)
+				ch <- &msg
+			}
+			return
+		}()
+		n.l.Printf("<<< %#v", msg)
+	}
+	n.l.Println("Something went terribly wrong, receiver exiting")
+	return
 }
 
 func PackMsg(msg string) IrcMessage {
