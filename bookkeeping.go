@@ -33,15 +33,15 @@ func (n *Network) DelListener(cmd, name string) os.Error {
 
 func (n *Network) overlook() {
 	for {
-		<- n.done  //wait for receiver and sender to quit
-		<- n.done
+		<-n.done //wait for receiver and sender to quit
+		<-n.done
 		n.Disconnected = true
 		n.l.Println("Something went wrong, reconnecting")
 		err := n.Reconnect()
 		if err != nil {
-			for i := 0; i<=30; i++ {
+			for i := 0; i <= 30; i++ {
 				n.l.Printf("Error during reconnect: %s", err.String())
-				<- time.Tick(1000 * 1000 * 1000 * 10)  //try reconnecting every 10 second
+				<-time.Tick(1000 * 1000 * 1000 * 10) //try reconnecting every 10 second
 				err = n.Reconnect()
 				if err == nil {
 					break

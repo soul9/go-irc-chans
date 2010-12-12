@@ -1,12 +1,12 @@
 package main
 
 import (
-  "flag"
-  "os"
-  "ircchans"
-  "log"
-  "time"
-  "fmt"
+	"flag"
+	"os"
+	"ircchans"
+	"log"
+	"time"
+	"fmt"
 )
 
 func main() {
@@ -36,22 +36,22 @@ func main() {
 		os.Exit(1)
 	}
 	n.Join([]string{"#soul9", "#ubuntu"}, []string{})
-/*	go func(){
-		chin := make(chan *IrcMessage, 100)
-		n.RegListener("PRIVMSG", "testreply", chin)
-		for !closed(chin) {
-			msg := <- chin
-			if msg.Params[0] == n.nick {
-				n.Privmsg([]string{msg.Prefix}, strings.Join(msg.Params[1:], " "))
-			} else {
-				n.Privmsg(msg.Params[:1], strings.Join(msg.Params[1:], " "))
+	/*	go func(){
+			chin := make(chan *IrcMessage, 100)
+			n.RegListener("PRIVMSG", "testreply", chin)
+			for !closed(chin) {
+				msg := <- chin
+				if msg.Params[0] == n.nick {
+					n.Privmsg([]string{msg.Prefix}, strings.Join(msg.Params[1:], " "))
+				} else {
+					n.Privmsg(msg.Params[:1], strings.Join(msg.Params[1:], " "))
+				}
 			}
-		}
-	}()
-*/
+		}()
+	*/
 	ticker := time.Tick(1000 * 1000 * 1000 * 60 * 1)
 	for !closed(ticker) {
-		<- ticker
+		<-ticker
 		fmt.Println(time.LocalTime())
 	}
 	os.Exit(0)

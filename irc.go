@@ -27,7 +27,7 @@ type Network struct {
 	l                 *log.Logger
 	conn              net.Conn
 	done              chan bool
-	Disconnected	bool
+	Disconnected      bool
 	buf               *bufio.ReadWriter
 	ticker1, ticker15 <-chan int64
 	listen            map[string]map[string]chan *IrcMessage //wildcard * is for any message
@@ -112,7 +112,7 @@ func (n *Network) Reconnect() os.Error {
 }
 
 func (n *Network) sender() {
-	defer func(ch chan bool){ch <- true}(n.done)
+	defer func(ch chan bool) { ch <- true }(n.done)
 	for !n.Disconnected {
 		if n.conn == nil {
 			n.l.Println("socket closed, returning from sender()")
@@ -122,7 +122,7 @@ func (n *Network) sender() {
 		var msg string
 		select {
 		case msg = <-n.queueOut:
-		case <- time.Tick(1000 * 1000 * 1000 * 1):  //timeout every second and check if we are disconnected
+		case <-time.Tick(1000 * 1000 * 1000 * 1): //timeout every second and check if we are disconnected
 			if n.Disconnected {
 				return
 			} else {
@@ -153,7 +153,7 @@ func (n *Network) sender() {
 	return
 }
 func (n *Network) receiver() {
-	defer func(ch chan bool){ch <- true}(n.done)
+	defer func(ch chan bool) { ch <- true }(n.done)
 	for !n.Disconnected {
 		if n.conn == nil {
 			n.l.Println("Can't receive on socket: socket disconnected")

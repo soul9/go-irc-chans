@@ -25,7 +25,7 @@ func (n *Network) pinger() {
 		}
 	}
 	n.l.Println("Something went terribly wrong, pinger exiting")
-	n.DelListener("*", "ticker")  //close channel and delete listener
+	n.DelListener("*", "ticker") //close channel and delete listener
 	return
 }
 

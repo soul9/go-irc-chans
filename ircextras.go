@@ -121,9 +121,9 @@ var replies = map[string]string{"ERR_NOSUCHCHANNEL": "403",
 	"RPL_LUSERCHANNELS":    "254",
 	"RPL_LUSERME":          "255",
 	"RPL_ADMINME":          "256",
-	"RPL_ADMINEMAIL":                  "259"}
+	"RPL_ADMINEMAIL":       "259"}
 
-const timeout = 1000 * 1000 * 1000 * 5  //timeout of 5 seconds
+const timeout = 1000 * 1000 * 1000 * 5 //timeout of 5 seconds
 func (n *Network) Pass() os.Error {
 	t := strconv.Itoa64(time.Nanoseconds())
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}
