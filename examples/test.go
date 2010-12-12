@@ -5,6 +5,8 @@ import (
   "os"
   "ircchans"
   "log"
+  "time"
+  "fmt"
 )
 
 func main() {
@@ -33,7 +35,7 @@ func main() {
 		log.Println(err.String())
 		os.Exit(1)
 	}
-	n.Join([]string{"#soul9"}, []string{})
+	n.Join([]string{"#soul9", "#ubuntu"}, []string{})
 /*	go func(){
 		chin := make(chan *IrcMessage, 100)
 		n.RegListener("PRIVMSG", "testreply", chin)
@@ -47,6 +49,10 @@ func main() {
 		}
 	}()
 */
-	_ = <- n.QuitCh
+	ticker := time.Tick(1000 * 1000 * 1000 * 60 * 1)
+	for !closed(ticker) {
+		<- ticker
+		fmt.Println(time.LocalTime())
+	}
 	os.Exit(0)
 }

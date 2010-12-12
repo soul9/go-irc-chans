@@ -27,7 +27,7 @@ type Network struct {
 	l                 *log.Logger
 	conn              net.Conn
 	done              chan bool
-	QuitCh		chan bool
+	Disconnected	bool
 	buf               *bufio.ReadWriter
 	ticker1, ticker15 <-chan int64
 	listen            map[string]map[string]chan *IrcMessage //wildcard * is for any message
@@ -71,6 +71,7 @@ func (n *Network) Connect() os.Error {
 	}
 	n.buf = bufio.NewReadWriter(bufio.NewReader(n.conn), bufio.NewWriter(n.conn))
 	n.server = n.conn.RemoteAddr().String()
+	n.Disconnected = false
 	n.l.Printf("Connected to network %s, server %s\n", n.network, n.server)
 	n.ticker1 = time.Tick(1000 * 1000 * 1000 * 60 * 1)   //Tick every minute.
 	n.ticker15 = time.Tick(1000 * 1000 * 1000 * 60 * 15) //Tick every 15 minutes.
@@ -88,43 +89,62 @@ func (n *Network) Connect() os.Error {
 	return nil
 }
 
-func (n *Network) overlook() {
-	<- n.done  //wait for receiver and sender to quit
-	<- n.done
-	n.QuitCh <- true  //should reconnect here
-	return
+func (n *Network) Reconnect() os.Error {
+	var err os.Error
+	if n.conn != nil {
+		n.conn.Close()
+	}
+	n.conn, err = net.Dial("tcp", "", n.network)
+	if err != nil {
+		return os.NewError(fmt.Sprintf("Couldn't connect to network %s: %s.\n", n.network, err.String()))
+	}
+	n.buf = bufio.NewReadWriter(bufio.NewReader(n.conn), bufio.NewWriter(n.conn))
+	n.server = n.conn.RemoteAddr().String()
+	n.Disconnected = false
+	go n.sender()
+	go n.receiver()
+	if n.password != "" {
+		n.Pass()
+	}
+	n.nick = n.Nick(n.nick)
+	n.user = n.User(n.user)
+	return nil
 }
 
 func (n *Network) sender() {
-	var err os.Error
-	for err == nil {
+	defer func(ch chan bool){ch <- true}(n.done)
+	for !n.Disconnected {
 		if n.conn == nil {
 			n.l.Println("socket closed, returning from sender()")
-			n.done <- true
+			n.Disconnected = true
 			return
 		}
-		if closed(n.queueOut) {
-			n.l.Println("queueOut closed, returning from sender()")
-			n.done <- true
-			return
+		var msg string
+		select {
+		case msg = <-n.queueOut:
+		case <- time.Tick(1000 * 1000 * 1000 * 1):  //timeout every second and check if we are disconnected
+			if n.Disconnected {
+				return
+			} else {
+				continue
+			}
 		}
-		msg := <-n.queueOut
 		err, _ := PackMsg(msg)
 		if err == nil {
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
+			if err != nil {
+				n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
+				n.Disconnected = true
+				return
+			}
 		} else {
 			n.l.Println("Couldn't send malformed message: ", msg)
 			continue
 		}
-		if err != nil {
-			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-			n.done <- true
-			return
-		}
 		err = n.buf.Flush()
 		if err != nil {
 			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
-			n.done <- true
+			n.Disconnected = true
 			return
 		}
 		n.l.Printf(">>> %s\n", msg)
@@ -132,94 +152,18 @@ func (n *Network) sender() {
 	n.l.Println("Something went terribly wrong, sender exiting")
 	return
 }
-
-func (n *Network) pinger() {
-	tick := make(chan *IrcMessage)
-	var lastMessage int64
-	n.RegListener("*", "ticker", tick)
-	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
-		select {
-		case <-n.ticker1:
-			n.l.Println("Ticked 1 minute")
-			if time.Seconds()-lastMessage >= 60*4 {
-				n.Ping()
-			}
-		case <-n.ticker15:
-			//Ping every 15 minutes.
-			n.l.Println("Ticked 15 minutes")
-			n.Ping()
-		case <-tick:
-			n.l.Println("Don't tick for 4 minutes")
-			lastMessage = time.Seconds()
-		}
-	}
-	n.l.Println("Something went terribly wrong, pinger exiting")
-	n.DelListener("*", "ticker")  //close channel and delete listener
-	return
-}
-
-func (n *Network) ponger() {
-	pingch := make(chan *IrcMessage)
-	n.RegListener("PING", "ponger", pingch)
-	for !closed(pingch) {
-		p := <-pingch
-		if p == nil {
-			n.l.Println("Something bad happened, ponger returning")
-			n.DelListener("PING", "ponger")
-			return
-		}
-		n.Pong(p.Params[0])
-	}
-	n.l.Println("Something went terribly wrong, ponger exiting")
-	return
-}
-
-//CTCP sucks, each client implements it a bit differently
-func (n *Network) ctcp() {
-	ch := make(chan *IrcMessage)
-	n.RegListener("PRIVMSG", "ctcp", ch)
-	for !closed(ch) {
-		p := <-ch
-		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1{
-			ctype := p.Params[1][2:i]
-			dst := strings.Split(p.Prefix, "!", -1)[0]
-			switch {
-			case  ctype == "VERSION":
-				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
-			case  ctype== "USERINFO":
-				n.Notice(dst, fmt.Sprintf("\x01USERINFO %s\x01", n.user))
-			case  ctype == "CLIENTINFO":
-				n.Notice(dst, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO\x01")
-			case  ctype[0:4] == "PING":
-				params := strings.Split(p.Params[1], " ", -1)
-				if len(params) < 2 {
-					n.l.Println("Illegal ctcp ping received: No arguments", p)
-					break
-				}
-				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
-			case  ctype == "TIME":
-				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
-			//TODO: ACTION, FINGER, SOURCE, PAGE?
-			}
-		}
-	}
-	n.l.Println("Something bad happened, ctcp returning")
-	n.DelListener("PRIVMSG", "ctcp")
-	return
-}
-
 func (n *Network) receiver() {
-	var err os.Error
-	for err == nil {
+	defer func(ch chan bool){ch <- true}(n.done)
+	for !n.Disconnected {
 		if n.conn == nil {
 			n.l.Println("Can't receive on socket: socket disconnected")
-			n.done <- true
+			n.Disconnected = true
 			return
 		}
 		l, err := n.buf.ReadString('\n')
 		if err != nil {
-			n.l.Println("Can't receive on socket: ", err.String())
-			n.done <- true
+			n.l.Println("Can't read: socket: ", err.String())
+			n.Disconnected = true
 			return
 		}
 		l = strings.TrimRight(l, "\r\n")
@@ -276,29 +220,6 @@ func PackMsg(msg string) (os.Error, IrcMessage) {
 	return nil, ret
 }
 
-func (n *Network) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
-	if _, ok := n.listen[cmd]; !ok {
-		n.listen[cmd] = make(map[string]chan *IrcMessage)
-	} else if _, ok := n.listen[cmd][name]; ok {
-		return os.NewError(fmt.Sprintf("Can't register listener %s for cmd %s: already listening", name, cmd))
-	}
-	n.listen[cmd][name] = ch
-	return nil
-}
-
-func (n *Network) DelListener(cmd, name string) os.Error {
-	if n.listen[cmd] == nil || n.listen[cmd][name] == nil {
-		return os.NewError(fmt.Sprintf("No such listener: %s for cmd %s", name, cmd))
-	}
-	if closed(n.listen[cmd][name]) {
-		n.listen[cmd][name] = nil
-		return os.NewError(fmt.Sprintf("Already closed; wiped: %s for cmd %s", name, cmd))
-	}
-	close(n.listen[cmd][name])
-	n.listen[cmd][name] = nil
-	return nil
-}
-
 func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n := new(Network)
 	n.network = net
@@ -308,7 +229,6 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.realname = rn
 	n.listen = make(map[string]map[string]chan *IrcMessage)
 	n.done = make(chan bool)
-	n.QuitCh = make(chan bool)
 	n.queueOut = make(chan string, 100)
 	n.queueIn = make(chan string, 100)
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
