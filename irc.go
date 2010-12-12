@@ -50,7 +50,7 @@ func (m *IrcMessage) String() string {
 	if m.Prefix != "" {
 		msg.WriteString(fmt.Sprintf(":%s ", m.Prefix))
 	}
-	msg.WriteString(fmt.Sprintf("%s", m.Cmd))
+	msg.WriteString(fmt.Sprintf("%s ", m.Cmd))
 
 	msg.WriteString(strings.Join(m.Params, " "))
 	if msg.Len() > 510 {
@@ -109,7 +109,13 @@ func (n *Network) sender() {
 			return
 		}
 		msg := <-n.queueOut
-		_, err := n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
+		err, _ := PackMsg(msg)
+		if err == nil {
+			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
+		} else {
+			n.l.Println("Couldn't send malformed message: ", msg)
+			continue
+		}
 		if err != nil {
 			n.l.Printf("Error writing to socket: %s, returning from sender()", err.String())
 			n.done <- true
@@ -177,7 +183,6 @@ func (n *Network) ctcp() {
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1{
 			ctype := p.Params[1][2:i]
 			dst := strings.Split(p.Prefix, "!", -1)[0]
-			n.l.Println("<<< CTCP", p)
 			switch {
 			case  ctype == "VERSION":
 				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
@@ -218,7 +223,10 @@ func (n *Network) receiver() {
 			return
 		}
 		l = strings.TrimRight(l, "\r\n")
-		msg := PackMsg(l)
+		err, msg := PackMsg(l)
+		if err != nil {
+			n.l.Printf("Couldn't unpack message: %s: %s", err.String(), l)
+		}
 		//dispatch
 		go func() {
 			for na, ch := range n.listen[msg.Cmd] {
@@ -231,25 +239,28 @@ func (n *Network) receiver() {
 			}
 			return
 		}()
-		n.l.Printf("<<< %#v", msg)
+		n.l.Printf("<<< %s", msg.String())
 	}
 	n.l.Println("Something went terribly wrong, receiver exiting")
 	return
 }
 
-func PackMsg(msg string) IrcMessage {
+func PackMsg(msg string) (os.Error, IrcMessage) {
 	var ret IrcMessage
+	err := "Errors encountered during message packing: "
 	if strings.HasPrefix(msg, ":") {
 		if i := strings.Index(msg, " "); i > -1 {
 			ret.Prefix = msg[1:i]
 			msg = msg[i+1:]
 		} else {
-			log.Println("Malformed message: ", msg)
+			err += "Malformed message, "
 		}
 	}
 	if i := strings.Index(msg, " "); i > -1 {
 		ret.Cmd = msg[0:i]
 		msg = msg[i+1:]
+	} else {
+		err += "No command found"
 	}
 	ret.Params = strings.Split(msg, " ", -1)
 	for i, m := range ret.Params {
@@ -259,7 +270,10 @@ func PackMsg(msg string) IrcMessage {
 			break
 		}
 	}
-	return ret
+	if err != "Errors encountered during message packing: " {
+		return os.NewError(err), ret
+	}
+	return nil, ret
 }
 
 func (n *Network) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
