@@ -1,4 +1,4 @@
-package main
+package ircchans
 
 import (
 	"os"
@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"bytes"
 	"strings"
-	"flag"
 	"bufio"
 	"time"
 )
@@ -28,6 +27,7 @@ type Network struct {
 	l                 *log.Logger
 	conn              net.Conn
 	done              chan bool
+	QuitCh		chan bool
 	buf               *bufio.ReadWriter
 	ticker1, ticker15 <-chan int64
 	listen            map[string]map[string]chan *IrcMessage //wildcard * is for any message
@@ -63,7 +63,6 @@ func (n *Network) Connect() os.Error {
 	if n.user == "" || n.nick == "" || n.realname == "" {
 		return os.NewError("Empty nick and/or user and/or real name")
 	}
-	n.listen = make(map[string]map[string]chan *IrcMessage)
 	n.l.Printf("Connecting to irc network %s.\n", n.network)
 	var err os.Error
 	n.conn, err = net.Dial("tcp", "", n.network)
@@ -73,14 +72,12 @@ func (n *Network) Connect() os.Error {
 	n.buf = bufio.NewReadWriter(bufio.NewReader(n.conn), bufio.NewWriter(n.conn))
 	n.server = n.conn.RemoteAddr().String()
 	n.l.Printf("Connected to network %s, server %s\n", n.network, n.server)
-	n.done = make(chan bool)
-	n.queueOut = make(chan string, 100)
-	n.queueIn = make(chan string, 100)
 	n.ticker1 = time.Tick(1000 * 1000 * 1000 * 60 * 1)   //Tick every minute.
 	n.ticker15 = time.Tick(1000 * 1000 * 1000 * 60 * 15) //Tick every 15 minutes.
+	go n.overlook()
 	go n.sender()
-	go n.pinger(nil, 0)
 	go n.receiver()
+	go n.pinger(nil, 0)
 	go n.ponger(nil)
 	go n.ctcp()
 	if n.password != "" {
@@ -89,6 +86,13 @@ func (n *Network) Connect() os.Error {
 	n.nick = n.Nick(n.nick)
 	n.user = n.User(n.user)
 	return nil
+}
+
+func (n *Network) overlook() {
+	<- n.done  //wait for receiver and sender to quit
+	<- n.done
+	n.QuitCh <- true  //should reconnect here
+	return
 }
 
 func (n *Network) sender() {
@@ -193,7 +197,6 @@ func (n *Network) ctcp() {
 }
 
 func (n *Network) receiver() {
-	for {
 	if n.conn == nil {
 		n.l.Println("Can't receive on socket: socket disconnected")
 		n.done <- true
@@ -207,6 +210,7 @@ func (n *Network) receiver() {
 	}
 	l = strings.TrimRight(l, "\r\n")
 	msg := PackMsg(l)
+	n.l.Printf("<<< %#v", msg)
 	//dispatch
 	go func() {
 		for na, ch := range n.listen[msg.Cmd] {
@@ -219,7 +223,6 @@ func (n *Network) receiver() {
 		}
 		return
 	}()
-	}
 	n.receiver()
 }
 
@@ -278,6 +281,11 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.nick = nick
 	n.user = usr
 	n.realname = rn
+	n.listen = make(map[string]map[string]chan *IrcMessage)
+	n.done = make(chan bool)
+	n.QuitCh = make(chan bool)
+	n.queueOut = make(chan string, 100)
+	n.queueIn = make(chan string, 100)
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
 	if logfp == "" {
@@ -292,48 +300,4 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 		}
 	}
 	return n
-}
-
-func main() {
-	netf := flag.String("net", "viotest.local:6667", "Network name in the form of network.dom:port")
-	passf := flag.String("p", "", "Network Password")
-	nickf := flag.String("n", "go-ircfs", "Nickname on network")
-	userf := flag.String("u", "", "Irc user (defaults to nick)")
-	rnf := flag.String("r", "go-ircfs", "Real Name (defaults to nick)")
-	logfile := flag.String("l", "", "File used for logging (default: stderr)")
-	usage := flag.Bool("h", false, "Display usage and help message")
-	flag.Parse()
-	if *usage {
-		flag.PrintDefaults()
-		os.Exit(0)
-	}
-	if *userf == "" {
-		userf = nickf
-	}
-	if *rnf == "" {
-		rnf = nickf
-	}
-
-	n := NewNetwork(*netf, *nickf, *userf, *rnf, *passf, *logfile)
-	err := n.Connect()
-	if err != nil {
-		n.l.Println(err.String())
-		os.Exit(1)
-	}
-	n.Join([]string{"#soul9"}, []string{})
-/*	go func(){
-		chin := make(chan *IrcMessage, 100)
-		n.RegListener("PRIVMSG", "testreply", chin)
-		for !closed(chin) {
-			msg := <- chin
-			if msg.Params[0] == n.nick {
-				n.Privmsg([]string{msg.Prefix}, strings.Join(msg.Params[1:], " "))
-			} else {
-				n.Privmsg(msg.Params[:1], strings.Join(msg.Params[1:], " "))
-			}
-		}
-	}()
-*/
-	<-n.done
-	os.Exit(0)
 }
