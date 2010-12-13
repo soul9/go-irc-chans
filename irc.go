@@ -123,15 +123,18 @@ func (n *Network) sender() {
 			return
 		}
 		var msg string
+		timeout := time.NewTicker(1000 * 1000 * 1000 * 1)
 		select {
 		case msg = <-n.queueOut:
-		case <-time.Tick(1000 * 1000 * 1000 * 1): //timeout every second and check if we are disconnected
+		case <-timeout.C: //timeout every second and check if we are disconnected
 			if n.Disconnected {
+				timeout.Stop()
 				return
 			} else {
 				continue
 			}
 		}
+		timeout.Stop()
 		err, _ := PackMsg(msg)
 		if err == nil {
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))

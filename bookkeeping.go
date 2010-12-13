@@ -41,9 +41,11 @@ func (n *Network) overlook() {
 		if err != nil {
 			for {
 				n.l.Printf("Error during reconnect: %s", err.String())
-				<-time.Tick(1000 * 1000 * 1000 * 10) //try reconnecting every 10 second
+				timeout := time.NewTicker(1000 * 1000 * 1000 * 10) //try reconnecting every 10 second
+				<-timeout.C
 				err = n.Reconnect()
 				if err == nil {
+					timeout.Stop()
 					break
 				}
 			}
