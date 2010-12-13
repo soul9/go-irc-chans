@@ -90,6 +90,9 @@ func (n *Network) Connect() os.Error {
 }
 
 func (n *Network) Reconnect() os.Error {
+	for _, ok := <- n.queueOut; ok; _, ok = <- n.queueOut {
+		continue  //empty the queues
+	}
 	var err os.Error
 	if n.conn != nil {
 		n.conn.Close()
