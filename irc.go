@@ -115,7 +115,8 @@ func (n *Network) Reconnect() os.Error {
 }
 
 func (n *Network) sender() {
-	defer func(ch chan bool) { ch <- true }(n.done)
+	timeout := time.NewTicker(1000 * 1000 * 1000 * 1)
+	defer func(ch chan bool, t *time.Ticker) { t.Stop(); ch <- true }(n.done, timeout)
 	for !n.Disconnected {
 		if n.conn == nil {
 			n.l.Println("socket closed, returning from sender()")
@@ -123,18 +124,15 @@ func (n *Network) sender() {
 			return
 		}
 		var msg string
-		timeout := time.NewTicker(1000 * 1000 * 1000 * 1)
 		select {
 		case msg = <-n.queueOut:
 		case <-timeout.C: //timeout every second and check if we are disconnected
 			if n.Disconnected {
-				timeout.Stop()
 				return
 			} else {
 				continue
 			}
 		}
-		timeout.Stop()
 		err, _ := PackMsg(msg)
 		if err == nil {
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
