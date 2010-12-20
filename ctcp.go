@@ -20,7 +20,7 @@ func (n *Network) ctcp() {
 			case ctype == "USERINFO":
 				n.Notice(dst, fmt.Sprintf("\x01USERINFO %s\x01", n.user))
 			case ctype == "CLIENTINFO":
-				n.Notice(dst, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO\x01")
+				n.Notice(dst, "\x01CLIENTINFO PING VERSION TIME USERINFO CLIENTINFO FINGER SOURCE\x01")
 			case ctype[0:4] == "PING":
 				params := strings.Split(p.Params[1], " ", -1)
 				if len(params) < 2 {
@@ -30,7 +30,12 @@ func (n *Network) ctcp() {
 				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
 			case ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
-				//TODO: ACTION, FINGER, SOURCE, PAGE?
+				//TODO: ACTION, PAGE?
+			case ctype == "FINGER":
+				n.Notice(dst, fmt.Sprintln("\x01FINGER like i'm gonna tell you\x01"))
+			case ctype == "SOURCE":
+				n.Notice(dst, fmt.Sprintln("\x01SOURCE https://github.com/soul9/go-irc-chans\x01"))
+
 			}
 		}
 	}

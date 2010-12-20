@@ -3,53 +3,33 @@ package ircchans
 import (
 	"os"
 	"fmt"
-	"time"
 )
 
 func (n *Network) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
-	if _, ok := n.listen[cmd]; !ok {
-		n.listen[cmd] = make(map[string]chan *IrcMessage)
-	} else if ch, ok := n.listen[cmd][name]; ok {
+	n.listen.lock.Lock()
+	defer func(m dispatchMap) { m.lock.Unlock(); return }(n.listen)
+	if _, ok := n.listen.chans[cmd]; !ok {
+		n.listen.chans[cmd] = make(map[string]chan *IrcMessage)
+	} else if ch, ok := n.listen.chans[cmd][name]; ok {
 		if ch != nil {
 			return os.NewError(fmt.Sprintf("Can't register listener %s for cmd %s: already listening", name, cmd))
 		}
 	}
-	n.listen[cmd][name] = ch
+	n.listen.chans[cmd][name] = ch
 	return nil
 }
 
 func (n *Network) DelListener(cmd, name string) os.Error {
-	if n.listen[cmd] == nil || n.listen[cmd][name] == nil {
+	n.listen.lock.Lock()
+	defer func(m dispatchMap) { m.lock.Unlock(); return }(n.listen)
+	if n.listen.chans[cmd] == nil || n.listen.chans[cmd][name] == nil {
 		return os.NewError(fmt.Sprintf("No such listener: %s for cmd %s", name, cmd))
 	}
-	if closed(n.listen[cmd][name]) {
-		n.listen[cmd][name] = nil
+	if closed(n.listen.chans[cmd][name]) {
+		n.listen.chans[cmd][name] = nil, false
 		return os.NewError(fmt.Sprintf("Already closed; wiped: %s for cmd %s", name, cmd))
 	}
-	close(n.listen[cmd][name])
-	n.listen[cmd][name] = nil
+	close(n.listen.chans[cmd][name])
+	n.listen.chans[cmd][name] = nil, false
 	return nil
-}
-
-func (n *Network) overlook() {
-	for {
-		<-n.done //wait for receiver and sender to quit
-		<-n.done
-		n.Disconnected = true
-		n.l.Println("Something went wrong, reconnecting")
-		err := n.Reconnect()
-		if err != nil {
-			for {
-				n.l.Printf("Error during reconnect: %s", err.String())
-				timeout := time.NewTicker(1000 * 1000 * 1000 * 10) //try reconnecting every 10 second
-				<-timeout.C
-				err = n.Reconnect()
-				if err == nil {
-					timeout.Stop()
-					break
-				}
-			}
-		}
-	}
-	return
 }

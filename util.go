@@ -11,16 +11,13 @@ func (n *Network) pinger() {
 	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
 		select {
 		case <-n.ticker1:
-			n.l.Println("Ticked 1 minute")
 			if time.Seconds()-lastMessage >= 60*4 {
 				n.Ping()
 			}
 		case <-n.ticker15:
 			//Ping every 15 minutes.
-			n.l.Println("Ticked 15 minutes")
 			n.Ping()
 		case <-tick:
-			n.l.Println("Don't tick for 4 minutes")
 			lastMessage = time.Seconds()
 		}
 	}
@@ -36,11 +33,11 @@ func (n *Network) ponger() {
 		p := <-pingch
 		if p == nil {
 			n.l.Println("Something bad happened, ponger returning")
-			n.DelListener("PING", "ponger")
-			return
+			break
 		}
 		n.Pong(p.Params[0])
 	}
+	n.DelListener("PING", "ponger")
 	n.l.Println("Something went terribly wrong, ponger exiting")
 	return
 }

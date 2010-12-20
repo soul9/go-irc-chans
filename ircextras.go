@@ -8,7 +8,10 @@ import (
 	"time"
 )
 //irc reply message types
-var replies = map[string]string{"ERR_NOSUCHCHANNEL": "403",
+var replies = map[string]string{
+	"ERR_NOSUCHNICK":       "401",
+	"ERR_NOSUCHSERVER":     "402",
+	"ERR_NOSUCHCHANNEL":    "403",
 	"ERR_CANNOTSENDTOCHAN": "404",
 	"ERR_TOOMANYCHANNELS":  "405",
 	"ERR_WASNOSUCHNICK":    "406",
@@ -124,6 +127,8 @@ var replies = map[string]string{"ERR_NOSUCHCHANNEL": "403",
 	"RPL_ADMINEMAIL":       "259"}
 
 const timeout = 1000 * 1000 * 1000 * 5 //timeout of 5 seconds
+
+
 func (n *Network) Pass() os.Error {
 	t := strconv.Itoa64(time.Nanoseconds())
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}
@@ -134,6 +139,11 @@ func (n *Network) Pass() os.Error {
 			err = os.NewError(fmt.Sprintf("Couldn't authenticate with password, exiting: %s", err.String()))
 		}
 	}
+	defer func(myreplies []string, t string) {
+		for _, rep := range myreplies {
+			n.DelListener(replies[rep], t)
+		}
+	}(myreplies, t)
 	n.queueOut <- fmt.Sprintf("PASS %s", n.password)
 	ticker := time.NewTicker(timeout) //timeout in 5 seconds
 	select {
@@ -146,10 +156,6 @@ func (n *Network) Pass() os.Error {
 		break
 	}
 	ticker.Stop()
-	for _, rep := range myreplies {
-		n.DelListener(replies[rep], "pwdreply")
-	}
-	//TODO: replies: ERR_NEEDMOREPARAMS              ERR_ALREADYREGISTRED
 	return err
 }
 
@@ -158,6 +164,8 @@ func (n *Network) Nick(newnick string) string {
 	myreplies := []string{"ERR_NONICKNAMEGIVEN", "ERR_ERRONEUSNICKNAME", "ERR_NICKNAMEINUSE", "ERR_NICKCOLLISION"}
 	if newnick == "" && n.nick == "" {
 		n.nick = "go-ircfs"
+	} else if newnick == "" {
+		return n.nick
 	}
 	//TODO: check for correct nick
 	if len(newnick) > 9 {
@@ -171,6 +179,11 @@ func (n *Network) Nick(newnick string) string {
 			os.Exit(1)
 		}
 	}
+	defer func(myreplies []string, t string) {
+		for _, rep := range myreplies {
+			n.DelListener(replies[rep], t)
+		}
+	}(myreplies, t)
 	ticker := time.NewTicker(timeout) //timeout in 5 seconds
 	n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
 	select {
@@ -182,11 +195,9 @@ func (n *Network) Nick(newnick string) string {
 		break
 	}
 	ticker.Stop()
-	for _, rep := range myreplies {
-		n.DelListener(replies[rep], "nickreply")
-	}
 	return n.nick
 }
+
 
 func (n *Network) User(newuser string) string {
 	if n.conn == nil {
@@ -235,7 +246,7 @@ func (n *Network) Join(chans []string, keys []string) {
 			return
 		}
 		if strings.Contains(ch, string(' ')) || strings.Contains(ch, string(7)) || strings.Contains(ch, ",") {
-			n.l.Printf("Channel %s contains illegal characters, returning prematurely")
+			n.l.Printf("Channel %s contains illegal characters, returning prematurely", ch)
 			return
 		}
 	}
@@ -260,9 +271,9 @@ func (n *Network) Part(chans []string) {
 func (n *Network) Mode(target, mode, params string) {
 	chmodes := []byte{'o', 'p', 's', 'i', 't', 'n', 'm', 'l', 'b', 'v', 'k'}
 	usrmodes := []byte{'i', 's', 'w', 'o'}
-	ok := false
-	for _, c := range mode {
-		found := false
+	var found bool
+	for _, c := range mode { //is it a channel mode?
+		found = false
 		for _, m := range chmodes {
 			if m == byte(c) {
 				found = true
@@ -273,7 +284,7 @@ func (n *Network) Mode(target, mode, params string) {
 			break
 		}
 	}
-	if !ok {
+	if !found { //maybe it's a user mode?
 		for _, c := range mode {
 			found := false
 			for _, m := range usrmodes {
@@ -282,7 +293,7 @@ func (n *Network) Mode(target, mode, params string) {
 					break
 				}
 			}
-			if !found {
+			if !found { //neither a channel nor a user mode, don't touch this
 				return
 				//TODO: return error?
 			}
@@ -389,20 +400,49 @@ func (n *Network) Who(target string) {
 	return
 }
 
-func (n *Network) Whois(target []string, server string) {
+func (n *Network) Whois(target []string, server string) map[string][]string { //TODO: return a map[string][][]string? map[string][]IrcMessage?
+	t := strconv.Itoa64(time.Nanoseconds())
+	ticker := time.NewTicker(minute / 4) //timeout after 15 seconds
+	myreplies := []string{"ERR_NOSUCHSERVER", "ERR_NONICKNAMEGIVEN",
+		"RPL_WHOISUSER", "RPL_WHOISCHANNELS",
+		"RPL_WHOISSERVER", "RPL_AWAY",
+		"RPL_WHOISOPERATOR", "RPL_WHOISIDLE",
+		"ERR_NOSUCHNICK", "RPL_ENDOFWHOIS"}
+	repch := make(chan *IrcMessage)
+	for _, rep := range myreplies {
+		if err := n.RegListener(replies[rep], t, repch); err != nil {
+			n.l.Printf("Couldn't whois %d=%s: %s", replies[rep], rep, err.String())
+			os.Exit(1)
+		}
+	}
+	defer func(myreplies []string, t string, tick *time.Ticker) {
+		for _, rep := range myreplies {
+			n.DelListener(replies[rep], t)
+		}
+		tick.Stop()
+	}(myreplies, t, ticker)
+
 	if server == "" {
 		n.queueOut <- fmt.Sprintf("WHOIS %s", strings.Join(target, ","))
 	} else {
 		n.queueOut <- fmt.Sprintf("WHOIS %s %s", server, strings.Join(target, ","))
 	}
-	//TODO: replies:
-	//ERR_NOSUCHSERVER                ERR_NONICKNAMEGIVEN
-	//RPL_WHOISUSER                   RPL_WHOISCHANNELS
-	//RPL_WHOISCHANNELS               RPL_WHOISSERVER
-	//RPL_AWAY                        RPL_WHOISOPERATOR
-	//RPL_WHOISIDLE                   ERR_NOSUCHNICK
-	//RPL_ENDOFWHOIS
-	return
+	info := make(map[string][]string)
+	for _, rep := range myreplies {
+		info[replies[rep]] = make([]string, 0)
+	}
+	for {
+		select {
+		case m := <-repch:
+			info[m.Cmd] = append(info[m.Cmd], strings.Join((*m).Params, " "))
+			if m.Cmd == replies["RPL_ENDOFWHOIS"] {
+				return info
+			}
+		case <-ticker.C:
+			return info
+		}
+	}
+	return info //BUG: why do we need this?
 }
 
 func (n *Network) Whowas(target string, count int, server string) {
