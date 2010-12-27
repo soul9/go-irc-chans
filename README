@@ -1,6 +1,6 @@
 Go irc channels
 ============
 
-«concurrent» irc library using channels to dispatch actions instead of functions as in thoj's event driven irc client library [1]. This library is strongly inspiired from that project [1], though.
+«concurrent» irc library using channels to dispatch actions instead of functions as in thoj's event driven irc client library [1]. This library is strongly inspired from that project [1], though.
 
 [1] https://github.com/thoj/Go-IRC-Client-Library
