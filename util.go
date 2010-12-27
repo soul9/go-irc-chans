@@ -11,12 +11,14 @@ func (n *Network) pinger() {
 	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
 		select {
 		case <-n.ticker1:
-			if time.Seconds()-lastMessage >= 60*4 {
+			if time.Seconds()-lastMessage >= 60*4 { //ping about every five minutes if there is no activity at all
 				n.Ping()
 			}
+			n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 		case <-n.ticker15:
 			//Ping every 15 minutes.
 			n.Ping()
+			n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 		case <-tick:
 			lastMessage = time.Seconds()
 		}

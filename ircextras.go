@@ -126,8 +126,7 @@ var replies = map[string]string{
 	"RPL_ADMINME":          "256",
 	"RPL_ADMINEMAIL":       "259"}
 
-const timeout = 1000 * 1000 * 1000 * 5 //timeout of 5 seconds
-
+const second = 1000 * 1000 * 1000 //one second in nanoseconds
 
 func (n *Network) Pass() os.Error {
 	t := strconv.Itoa64(time.Nanoseconds())
@@ -139,13 +138,15 @@ func (n *Network) Pass() os.Error {
 			err = os.NewError(fmt.Sprintf("Couldn't authenticate with password, exiting: %s", err.String()))
 		}
 	}
-	defer func(myreplies []string, t string) {
+	ticker := time.NewTicker(n.lag + second*5) //timeout in lag + 5 seconds
+	defer func(myreplies []string, t string, tick *time.Ticker) {
 		for _, rep := range myreplies {
 			n.DelListener(replies[rep], t)
 		}
-	}(myreplies, t)
+		tick.Stop()
+		return
+	}(myreplies, t, ticker)
 	n.queueOut <- fmt.Sprintf("PASS %s", n.password)
-	ticker := time.NewTicker(timeout) //timeout in 5 seconds
 	select {
 	case msg := <-repch:
 		if msg.Cmd == replies["ERR_NEEDMOREPARAMS"] {
@@ -155,7 +156,6 @@ func (n *Network) Pass() os.Error {
 	case <-ticker.C:
 		break
 	}
-	ticker.Stop()
 	return err
 }
 
@@ -167,9 +167,9 @@ func (n *Network) Nick(newnick string) string {
 	} else if newnick == "" {
 		return n.nick
 	}
-	//TODO: check for correct nick
+	//TODO: check for correct nick (illegal characters)
 	if len(newnick) > 9 {
-		newnick = newnick[:8]
+		newnick = newnick[:9]
 	}
 	n.nick = newnick
 	repch := make(chan *IrcMessage)
@@ -183,8 +183,9 @@ func (n *Network) Nick(newnick string) string {
 		for _, rep := range myreplies {
 			n.DelListener(replies[rep], t)
 		}
+		return
 	}(myreplies, t)
-	ticker := time.NewTicker(timeout) //timeout in 5 seconds
+	ticker := time.NewTicker(n.lag + second*5) //timeout in lag+5 seconds
 	n.queueOut <- fmt.Sprintf("NICK %s", n.nick)
 	select {
 	case msg := <-repch:
@@ -402,7 +403,7 @@ func (n *Network) Who(target string) {
 
 func (n *Network) Whois(target []string, server string) map[string][]string { //TODO: return a map[string][][]string? map[string][]IrcMessage?
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(minute / 4) //timeout after 15 seconds
+	ticker := time.NewTicker(n.lag + second*5) //timeout after lag+5 seconds
 	myreplies := []string{"ERR_NOSUCHSERVER", "ERR_NONICKNAMEGIVEN",
 		"RPL_WHOISUSER", "RPL_WHOISCHANNELS",
 		"RPL_WHOISSERVER", "RPL_AWAY",
@@ -420,6 +421,7 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 			n.DelListener(replies[rep], t)
 		}
 		tick.Stop()
+		return
 	}(myreplies, t, ticker)
 
 	if server == "" {
@@ -438,6 +440,8 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 			if m.Cmd == replies["RPL_ENDOFWHOIS"] {
 				return info
 			}
+			ticker.Stop()
+			ticker = time.NewTicker(n.lag + second*5) //restart the ticker to timeout correctly
 		case <-ticker.C:
 			return info
 		}
@@ -466,10 +470,49 @@ func (n *Network) PingNick(nick string) {
 	return
 }
 
-func (n *Network) Ping() {
+func (n *Network) Ping() (int64, os.Error) {
+	myreplies := []string{"ERR_NOORIGIN", "ERR_NOSUCHSERVER"}
+	t := strconv.Itoa64(time.Nanoseconds())
+	repch := make(chan *IrcMessage)
+	ticker := time.NewTicker(n.lag + second*5)
+	for _, rep := range myreplies {
+		n.RegListener(replies[rep], t, repch)
+	}
+	n.RegListener("PONG", t, repch)
+	var rep *IrcMessage
+	defer func(myreplies []string, t string, n *Network, tick *time.Ticker) {
+		for _, rep := range myreplies {
+			n.DelListener(replies[rep], t)
+		}
+		n.DelListener("PONG", t)
+		tick.Stop()
+		return
+	}(myreplies, t, n, ticker)
 	n.queueOut <- fmt.Sprintf("PING %d", time.Nanoseconds())
-	//TODO: numeric replies? PingNick?
-	return
+	select {
+	case <-ticker.C:
+		return 0, os.NewError("Timeout in receiving reply")
+	case rep = <-repch:
+	}
+	if rep.Cmd == "PONG" {
+		origtime, err := strconv.Atoi64(rep.Params[len(rep.Params)-1][1:])
+		if err == nil {
+			n.lag = time.Nanoseconds() - origtime
+			return time.Nanoseconds() - origtime, err
+		} else {
+			return 0, err
+		}
+	} else {
+		switch rep.Cmd {
+		case replies["ERR_NOORIGIN"]:
+			return 0, os.NewError("ERR_NOORIGIN")
+		case replies["ERR_NOSUCHSERVER"]:
+			return 0, os.NewError("ERR_NOSUCHSERVER")
+		default:
+			return 0, os.NewError("Unknown error")
+		}
+	}
+	return 0, os.NewError("Unknown error")
 }
 
 func (n *Network) Pong(msg string) {

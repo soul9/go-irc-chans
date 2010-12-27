@@ -24,6 +24,7 @@ type Network struct {
 	server            string
 	realname          string
 	password          string
+	lag               int64
 	queueOut          chan string
 	queueIn           chan string
 	l                 *log.Logger
@@ -87,6 +88,8 @@ func (n *Network) Connect() os.Error {
 	}
 	n.nick = n.Nick(n.nick)
 	n.user = n.User(n.user)
+	n.Ping()
+	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 	return nil
 }
 
@@ -147,10 +150,10 @@ func (n *Network) receiver() {
 		go func() {
 			n.listen.lock.RLock()
 			for _, ch := range n.listen.chans[msg.Cmd] {
-				ch <- &msg
+				_ = ch <- &msg
 			}
 			for _, ch := range n.listen.chans["*"] {
-				ch <- &msg
+				_ = ch <- &msg
 			}
 			n.listen.lock.RUnlock()
 			return
@@ -206,6 +209,7 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
+	n.lag = 1000 * 1000 * 1000 * 5 // initial lag of 5 seconds for all irc commands
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
