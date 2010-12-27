@@ -1,1 +1,3 @@
-test 9p with inotify http://www.ibm.com/developerworks/linux/library/l-ubuntu-inotify/index.html
+Implement dispatching of outgoing messages too, as it will be needed for logging
+Ircextras.go can probably be simplified, needs to be extended
+testing testing testing
