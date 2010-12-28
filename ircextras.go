@@ -127,7 +127,7 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-    return lag + (second)
+	return lag + (second)
 }
 
 func (n *Network) Pass() os.Error {
@@ -279,11 +279,11 @@ func (n *Network) Join(chans []string, keys []string) os.Error {
 	}
 	t := strconv.Itoa64(time.Nanoseconds())
 	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
-	myreplies := []string{"ERR_NEEDMOREPARAMS" ,"ERR_BANNEDFROMCHAN", 
-			"ERR_INVITEONLYCHAN" ,"ERR_BADCHANNELKEY", 
-			"ERR_CHANNELISFULL" ,"ERR_BADCHANMASK", 
-			"ERR_NOSUCHCHANNEL" ,"ERR_TOOMANYCHANNELS", 
-			"RPL_TOPIC", "JOIN"}
+	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_BANNEDFROMCHAN",
+		"ERR_INVITEONLYCHAN", "ERR_BADCHANNELKEY",
+		"ERR_CHANNELISFULL", "ERR_BADCHANMASK",
+		"ERR_NOSUCHCHANNEL", "ERR_TOOMANYCHANNELS",
+		"RPL_TOPIC", "JOIN"}
 	for _, ch := range chans {
 		if !strings.HasPrefix(ch, "#") && !strings.HasPrefix(ch, "&") && !strings.HasPrefix(ch, "+") && !strings.HasPrefix(ch, "!") {
 			return os.NewError(fmt.Sprintf("Channel %s doesn't start with a legal prefix", ch))
@@ -464,9 +464,9 @@ func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make pr
 	t := strconv.Itoa64(time.Nanoseconds())
 	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
 	myreplies := []string{"ERR_NORECIPIENT", "ERR_NOTEXTTOSEND",
-			"ERR_CANNOTSENDTOCHAN", "ERR_NOTOPLEVEL",
-			"ERR_WILDTOPLEVEL", "ERR_TOOMANYTARGETS",
-			"ERR_NOSUCHNICK", "RPL_AWAY"}
+		"ERR_CANNOTSENDTOCHAN", "ERR_NOTOPLEVEL",
+		"ERR_WILDTOPLEVEL", "ERR_TOOMANYTARGETS",
+		"ERR_NOSUCHNICK", "RPL_AWAY"}
 	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
 		if err := n.RegListener(replies[rep], t, repch); err != nil {

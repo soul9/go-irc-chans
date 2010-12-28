@@ -15,7 +15,7 @@ import (
 const (
 	VERSION = "go-irc-chans v0.1"
 	minute  = 1000 * 1000 * 1000 * 60
-	second = minute/60
+	second  = minute / 60
 )
 
 type Network struct {
@@ -92,7 +92,7 @@ func (n *Network) Connect() os.Error {
 		}
 	}
 	_, err = n.Nick(n.nick)
-	i :=0
+	i := 0
 	for err != nil {
 		n.nick = fmt.Sprintf("_%s", n.nick)
 		_, err = n.Nick(n.nick)
@@ -106,7 +106,7 @@ func (n *Network) Connect() os.Error {
 		n.Disconnect("Couldn't register user")
 		return os.NewError("Unable to register usename")
 	}
-	time.Sleep(minute/60) //sleep a second so the ping result is better
+	time.Sleep(minute / 60) //sleep a second so the ping result is better
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 	return nil
