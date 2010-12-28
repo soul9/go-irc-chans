@@ -1,3 +1,4 @@
 Implement dispatching of outgoing messages too, as it will be needed for logging
 Ircextras.go can probably be simplified, needs to be extended
 testing testing testing
+rfc2812

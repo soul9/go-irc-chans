@@ -15,6 +15,7 @@ import (
 const (
 	VERSION = "go-irc-chans v0.1"
 	minute  = 1000 * 1000 * 1000 * 60
+	second = minute/60
 )
 
 type Network struct {
@@ -84,10 +85,28 @@ func (n *Network) Connect() os.Error {
 	n.l.Printf("Connected to network %s, server %s\n", n.network, n.server)
 	go n.receiver()
 	if n.password != "" {
-		n.Pass()
+		err = n.Pass()
+		if err != nil {
+			n.Disconnect("Couldn't authenticate with password")
+			return os.NewError("Couldn't register with password")
+		}
 	}
-	n.nick = n.Nick(n.nick)
-	n.user = n.User(n.user)
+	_, err = n.Nick(n.nick)
+	i :=0
+	for err != nil {
+		n.nick = fmt.Sprintf("_%s", n.nick)
+		_, err = n.Nick(n.nick)
+		if i > 5 {
+			return os.NewError("Failed to acquire any alternate nick")
+		}
+		i++
+	}
+	n.user, err = n.User(n.user)
+	if err != nil {
+		n.Disconnect("Couldn't register user")
+		return os.NewError("Unable to register usename")
+	}
+	time.Sleep(minute/60) //sleep a second so the ping result is better
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 	return nil
@@ -112,6 +131,9 @@ func (n *Network) Disconnect(reason string) {
 func (n *Network) sender() {
 	for {
 		msg := <-n.queueOut
+		if n.conn == nil {
+			continue
+		}
 		err, _ := PackMsg(msg)
 		if err == nil {
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
@@ -209,7 +231,7 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
-	n.lag = 1000 * 1000 * 1000 * 5 // initial lag of 5 seconds for all irc commands
+	n.lag = timeout(0) // initial lag of 5 seconds for all irc commands
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
