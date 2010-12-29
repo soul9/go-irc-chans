@@ -106,9 +106,12 @@ func (n *Network) Connect() os.Error {
 		n.Disconnect("Couldn't register user")
 		return os.NewError("Unable to register usename")
 	}
-	time.Sleep(minute / 60) //sleep a second so the ping result is better
+	time.Sleep(second) //sleep a second so the ping result is better
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
+	if n.Disconnected == true {
+		return os.NewError("Unknown error, see logs")
+	}
 	return nil
 }
 
@@ -169,7 +172,7 @@ func (n *Network) receiver() {
 			n.l.Printf("Couldn't unpack message: %s: %s", err.String(), l)
 		}
 		//dispatch
-		go func() {
+		go func(msg IrcMessage) {
 			n.listen.lock.RLock()
 			for _, ch := range n.listen.chans[msg.Cmd] {
 				_ = ch <- &msg
@@ -179,7 +182,7 @@ func (n *Network) receiver() {
 			}
 			n.listen.lock.RUnlock()
 			return
-		}()
+		}(msg)
 		n.l.Printf("<<< %s", msg.String())
 	}
 	n.l.Println("Something went terribly wrong, receiver exiting")
@@ -231,7 +234,7 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
-	n.lag = timeout(0) // initial lag of 5 seconds for all irc commands
+	n.lag = timeout(second/15) // initial lag of 1 second for all irc commands
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)

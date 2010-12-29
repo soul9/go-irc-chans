@@ -127,7 +127,7 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	return lag + (second*2)
+	return lag * 10
 }
 
 func (n *Network) Pass() os.Error {
@@ -278,7 +278,7 @@ func (n *Network) Join(chans []string, keys []string) os.Error {
 		return os.NewError("No channels given")
 	}
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
+	ticker := time.NewTicker(timeout(n.lag))
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_BANNEDFROMCHAN",
 		"ERR_INVITEONLYCHAN", "ERR_BADCHANNELKEY",
 		"ERR_CHANNELISFULL", "ERR_BADCHANMASK",
@@ -616,7 +616,7 @@ func (n *Network) Ping() (int64, os.Error) {
 		origtime, err := strconv.Atoi64(rep.Params[len(rep.Params)-1][1:])
 		if err == nil {
 			n.lag = time.Nanoseconds() - origtime
-			return time.Nanoseconds() - origtime, err
+			return n.lag, err
 		} else {
 			return 0, err
 		}
