@@ -149,7 +149,7 @@ func TestIrc(t *testing.T) {
 	user := "nottelling"
 	realname := "I simply rock"
 	password := "justpassingby"
-	logfile := "/tmp/irctest.log"
+	logfile := ""
 	n := NewNetwork(network, nick, user, realname, password, logfile)
 	if err := n.Connect(); err != nil {
 		t.Errorf("Connect error: tried to connect to %s, got error %s", network, err.String())

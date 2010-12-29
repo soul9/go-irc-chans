@@ -10,6 +10,11 @@ import (
 	"bufio"
 	"time"
 	"sync"
+	"encoding/pem"
+	"crypto/tls"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/rsa"
 )
 
 const (
@@ -67,6 +72,67 @@ func (m *IrcMessage) String() string {
 	return msg.String()
 }
 
+func CustomTlsConf() (*tls.Config, os.Error) {
+	certfile := "clientcert.pem"
+	keyfile := "clientkey.pem"
+	confexist := false
+	if s, err := os.Stat(certfile); err == nil && s.IsRegular() {
+		if s, err := os.Stat(keyfile); err == nil && s.IsRegular() {
+			confexist = true
+		}
+	}
+	if !confexist {
+		priv, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			return nil, os.NewError(fmt.Sprintf("failed to generate private key: %s", err))
+		}
+		now := time.Seconds()
+		template := x509.Certificate{
+			SerialNumber: []byte{0},
+			Subject: x509.Name{
+				CommonName:   "127.0.0.1",
+				Organization: []string{"go-irc-chans"},
+			},
+			NotBefore: time.SecondsToUTC(now - 300),
+			NotAfter:  time.SecondsToUTC(now + 60*60*24*365), // valid for 1 year.
+
+			SubjectKeyId: []byte{1, 2, 3, 4},
+			KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		}
+		derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+		if err != nil {
+			return nil, os.NewError(fmt.Sprintf("Failed to create certificate: %s", err.String()))
+		}
+		certOut, err := os.Open(certfile, os.O_WRONLY|os.O_CREAT, 0644)
+		if err != nil {
+			return nil, os.NewError(fmt.Sprintf("failed to open %s for writing: %s", certfile, err.String()))
+		}
+		pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+		certOut.Close()
+		keyOut, err := os.Open(keyfile, os.O_WRONLY|os.O_CREAT, 0600)
+		if err != nil {
+			return nil, os.NewError(fmt.Sprintf("failed to open %s for writing:", keyfile, err))
+		}
+		pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+		keyOut.Close()
+	}
+	cert, err := tls.LoadX509KeyPair(certfile, keyfile)
+	if err != nil {
+		return nil, os.NewError(fmt.Sprintf("Error reading %s and/or %s for tls config", certfile, keyfile))
+	}
+	conf := &tls.Config{
+		Rand:               rand.Reader,
+		Time:               nil,
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            nil,
+		NextProtos:         nil, // []string{"irc"},
+		ServerName:         "",
+		AuthenticateClient: true,
+		CipherSuites:       nil, //[]uint16{tls.TLS_RSA_WITH_RC4_128_SHA, tls.TLS_RSA_WITH_AES_128_CBC_SHA, tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA, tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA},
+	}
+	return conf, nil
+}
+
 func (n *Network) Connect() os.Error {
 	var err os.Error
 	for _, ok := <-n.queueOut; ok; _, ok = <-n.queueOut { //empty the write channel so we don't send out-of-context messages
@@ -75,9 +141,15 @@ func (n *Network) Connect() os.Error {
 	if n.user == "" || n.nick == "" || n.realname == "" {
 		return os.NewError("Empty nick and/or user and/or real name")
 	}
-	n.conn, err = net.Dial("tcp", "", n.network)
+	tlsConfig, err := CustomTlsConf()
+	if err == nil {
+		n.conn, err = tls.Dial("tcp", "", n.network, tlsConfig)
+	}
 	if err != nil {
-		return os.NewError(fmt.Sprintf("Couldn't connect to network %s: %s.\n", n.network, err.String()))
+		n.conn, err = net.Dial("tcp", "", n.network)
+		if err != nil {
+			return os.NewError(fmt.Sprintf("Couldn't connect to network %s: %s.\n", n.network, err.String()))
+		}
 	}
 	n.buf = bufio.NewReadWriter(bufio.NewReader(n.conn), bufio.NewWriter(n.conn))
 	n.server = n.conn.RemoteAddr().String()
