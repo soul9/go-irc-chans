@@ -127,7 +127,7 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	return lag + (second)
+	return lag + (second*2)
 }
 
 func (n *Network) Pass() os.Error {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	//	"strings"
 )
+const minute  = 1000 * 1000 * 1000 * 60
 
 func main() {
 	netf := flag.String("net", "viotest.local:6667", "Network name in the form of network.dom:port")
@@ -37,7 +38,7 @@ func main() {
 			n.RegListener("PRIVMSG", "testreply", chin)
 			for !closed(chin) {
 				msg := <- chin
-				if msg.Params[0] == n.Nick("") {
+				if msg.Params[0], _ == n.Nick("") {
 					n.Privmsg([]string{msg.Prefix}, strings.Join(msg.Params[1:], " ")[1:])
 				} else {
 					n.Privmsg(msg.Params[:1], strings.Join(msg.Params[1:], " ")[1:])
@@ -55,11 +56,13 @@ func main() {
 				fmt.Println("Disconnected")
 				for err := n.Connect(); err != nil; err = n.Connect() {
 					fmt.Printf("Connection failed: %s", err.String())
+					time.Sleep(minute/12)
 				}
 				n.Join([]string{"#soul9"}, []string{})
 			}
 		case <-ticker15:
-			fmt.Println(n.Whois([]string{n.Nick("")}, ""))
+			nick, _ := n.Nick("")
+			fmt.Println(n.Whois([]string{nick}, ""))
 		}
 	}
 	os.Exit(0)
