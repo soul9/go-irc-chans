@@ -234,7 +234,7 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
-	n.lag = timeout(second/15) // initial lag of 1 second for all irc commands
+	n.lag = timeout(second / 15) // initial lag of 1 second for all irc commands
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
