@@ -23,6 +23,13 @@ const (
 	second  = minute / 60
 )
 
+var (
+	confdir    = os.Getenv("HOME") + "/.go-irc-chans"
+	tlsconfdir = confdir + "/tls"
+	certfile   = tlsconfdir + "/clientcert.pem"
+	keyfile    = tlsconfdir + "/clientkey.pem"
+)
+
 type Network struct {
 	nick              string
 	user              string
@@ -73,8 +80,10 @@ func (m *IrcMessage) String() string {
 }
 
 func CustomTlsConf() (*tls.Config, os.Error) {
-	certfile := "clientcert.pem"
-	keyfile := "clientkey.pem"
+	err := os.MkdirAll(tlsconfdir, 0751)
+	if err != nil {
+		log.Exitf("Couldn't create directory %s: %s", tlsconfdir, err.String())
+	}
 	confexist := false
 	if s, err := os.Stat(certfile); err == nil && s.IsRegular() {
 		if s, err := os.Stat(keyfile); err == nil && s.IsRegular() {
@@ -294,6 +303,10 @@ func PackMsg(msg string) (os.Error, IrcMessage) { //TODO: this needs work?
 
 func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n := new(Network)
+	err := os.MkdirAll(confdir, 0751)
+	if err != nil {
+		log.Exitf("Couldn't create directory %s: %s", confdir, err.String())
+	}
 	n.network = net
 	n.password = pass
 	n.nick = nick
