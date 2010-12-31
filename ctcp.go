@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 )
+
 //CTCP sucks, each client implements it a bit differently
 func (n *Network) ctcp() {
 	ch := make(chan *IrcMessage)
@@ -12,7 +13,7 @@ func (n *Network) ctcp() {
 	for !closed(ch) {
 		p := <-ch
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 {
-			ctype := p.Params[1][2:i]
+			ctype := p.Params[1][1:i]
 			dst := strings.Split(p.Prefix, "!", -1)[0]
 			switch {
 			case ctype == "VERSION":
@@ -27,7 +28,7 @@ func (n *Network) ctcp() {
 					n.l.Println("Illegal ctcp ping received: No arguments", p)
 					break
 				}
-				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
+				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params, " ")))
 			case ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
 				//TODO: ACTION, PAGE?
