@@ -15,7 +15,7 @@ func (n *Network) ctcp() {
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 {
 			p.Params[1] = strings.Trim(p.Params[1], "\x01")
 			ctype := p.Params[1]
-			dst := strings.Split(p.Prefix, "!", 1)[0]
+			dst := strings.Split(p.Prefix, "!", 2)[0]
 			switch {
 			case ctype == "VERSION":
 				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
