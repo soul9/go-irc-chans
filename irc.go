@@ -194,7 +194,7 @@ func (n *Network) sender() {
 		}
 		err, m := PackMsg(msg)
 		if err == nil {
-			if n.conn == nil {
+			if n.conn == nil || n.buf == nil {
 				n.l.Printf("Error writing message (%s): No connection", err.String(), msg)
 			}
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
