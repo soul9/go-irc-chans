@@ -45,7 +45,7 @@ type Network struct {
 	Disconnected      bool
 	buf               *bufio.ReadWriter
 	ticker1, ticker15 <-chan int64
-	listen            dispatchMap
+	Listen, OutListen dispatchMap
 }
 
 type IrcMessage struct {
@@ -155,6 +155,7 @@ func (n *Network) Connect() os.Error {
 		n.conn, err = tls.Dial("tcp", "", n.network, tlsConfig)
 	}
 	if err != nil {
+		n.l.Println("Problem connecting using tls, trying plain-text")
 		n.conn, err = net.Dial("tcp", "", n.network)
 		if err != nil {
 			return os.NewError(fmt.Sprintf("Couldn't connect to network %s: %s.\n", n.network, err.String()))
@@ -187,7 +188,7 @@ func (n *Network) Connect() os.Error {
 		n.Disconnect("Couldn't register user")
 		return os.NewError("Unable to register usename")
 	}
-	time.Sleep(second) //sleep a second so the ping result is better
+	time.Sleep(second) //sleep a second so the lag is more realistic
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 	if n.Disconnected == true {
@@ -196,9 +197,9 @@ func (n *Network) Connect() os.Error {
 	return nil
 }
 
-func (n *Network) Reconnect() os.Error {
+func (n *Network) Reconnect(reason string) os.Error {
 	n.l.Printf("Connecting to irc network %s.\n", n.network)
-	n.Disconnect("Reconnecting..")
+	n.Disconnect(reason)
 	return n.Connect()
 }
 
@@ -218,7 +219,7 @@ func (n *Network) sender() {
 		if n.conn == nil {
 			continue
 		}
-		err, _ := PackMsg(msg)
+		err, m := PackMsg(msg)
 		if err == nil {
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
 			if err != nil {
@@ -234,7 +235,18 @@ func (n *Network) sender() {
 			n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
 			continue
 		}
-		n.l.Printf(">>> %s\n", msg)
+		//dispatch
+		go func(msg IrcMessage) {
+			n.OutListen.lock.RLock()
+			for _, ch := range n.OutListen.chans[msg.Cmd] {
+				_ = ch <- &msg
+			}
+			for _, ch := range n.OutListen.chans["*"] {
+				_ = ch <- &msg
+			}
+			n.OutListen.lock.RUnlock()
+			return
+		}(m)
 	}
 	return
 }
@@ -254,17 +266,16 @@ func (n *Network) receiver() {
 		}
 		//dispatch
 		go func(msg IrcMessage) {
-			n.listen.lock.RLock()
-			for _, ch := range n.listen.chans[msg.Cmd] {
+			n.Listen.lock.RLock()
+			for _, ch := range n.Listen.chans[msg.Cmd] {
 				_ = ch <- &msg
 			}
-			for _, ch := range n.listen.chans["*"] {
+			for _, ch := range n.Listen.chans["*"] {
 				_ = ch <- &msg
 			}
-			n.listen.lock.RUnlock()
+			n.Listen.lock.RUnlock()
 			return
 		}(msg)
-		n.l.Printf("<<< %s", msg.String())
 	}
 	n.l.Println("Something went terribly wrong, receiver exiting")
 	return
@@ -312,14 +323,15 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.nick = nick
 	n.user = usr
 	n.realname = rn
-	n.listen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
+	n.Listen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
+	n.OutListen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
 	n.queueOut = make(chan string, 100)
 	n.queueIn = make(chan string, 100)
 	n.ticker1 = time.Tick(minute)       //Tick every minute.
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
-	n.lag = timeout(second / 15) // initial lag of 1 second for all irc commands
+	n.lag = timeout(second / 15) // initial lag of 0.5 second for all irc commands
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
@@ -338,5 +350,6 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	go n.pinger()
 	go n.ponger()
 	go n.ctcp()
+	go n.logger()
 	return n
 }

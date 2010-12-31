@@ -7,7 +7,7 @@ import (
 func (n *Network) pinger() {
 	tick := make(chan *IrcMessage)
 	var lastMessage int64
-	n.RegListener("*", "ticker", tick)
+	n.Listen.RegListener("*", "ticker", tick)
 	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
 		select {
 		case <-n.ticker1:
@@ -24,13 +24,13 @@ func (n *Network) pinger() {
 		}
 	}
 	n.l.Println("Something went terribly wrong, pinger exiting")
-	n.DelListener("*", "ticker") //close channel and delete listener
+	n.Listen.DelListener("*", "ticker") //close channel and delete listener
 	return
 }
 
 func (n *Network) ponger() {
 	pingch := make(chan *IrcMessage)
-	n.RegListener("PING", "ponger", pingch)
+	n.Listen.RegListener("PING", "ponger", pingch)
 	for !closed(pingch) {
 		p := <-pingch
 		if p == nil {
@@ -39,7 +39,25 @@ func (n *Network) ponger() {
 		}
 		n.Pong(p.Params[0])
 	}
-	n.DelListener("PING", "ponger")
+	n.Listen.DelListener("PING", "ponger")
 	n.l.Println("Something went terribly wrong, ponger exiting")
+	return
+}
+
+func (n *Network) logger() {
+	inch := make(chan *IrcMessage, 10)
+	outch := make(chan *IrcMessage, 10)
+	n.Listen.RegListener("*", "logger", inch)
+	n.OutListen.RegListener("*", "logger", outch)
+	for {
+		select {
+		case m := <-inch:
+			n.l.Printf("<<< %s", m.String())
+		case m := <-outch:
+			n.l.Printf(">>> %s", m.String())
+		}
+	}
+	n.Listen.DelListener("*", "logger")
+	n.OutListen.DelListener("*", "logger")
 	return
 }

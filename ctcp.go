@@ -8,7 +8,7 @@ import (
 //CTCP sucks, each client implements it a bit differently
 func (n *Network) ctcp() {
 	ch := make(chan *IrcMessage)
-	n.RegListener("PRIVMSG", "ctcp", ch)
+	n.Listen.RegListener("PRIVMSG", "ctcp", ch)
 	for !closed(ch) {
 		p := <-ch
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 {
@@ -40,6 +40,6 @@ func (n *Network) ctcp() {
 		}
 	}
 	n.l.Println("Something bad happened, ctcp returning")
-	n.DelListener("PRIVMSG", "ctcp")
+	n.Listen.DelListener("PRIVMSG", "ctcp")
 	return
 }

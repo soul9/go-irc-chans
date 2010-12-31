@@ -127,7 +127,7 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	return lag * 5
+	return lag * 10
 }
 
 func (n *Network) Pass() os.Error {
@@ -136,14 +136,14 @@ func (n *Network) Pass() os.Error {
 	var err os.Error
 	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
-		if err := n.RegListener(replies[rep], t, repch); err != nil {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			err = os.NewError(fmt.Sprintf("Couldn't authenticate with password, exiting: %s", err.String()))
 		}
 	}
-	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag + 5 seconds
+	ticker := time.NewTicker(timeout(n.lag))
 	defer func(myreplies []string, t string, tick *time.Ticker) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
 		tick.Stop()
 		return
@@ -163,7 +163,7 @@ func (n *Network) Pass() os.Error {
 
 func (n *Network) Nick(newnick string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
+	ticker := time.NewTicker(timeout(n.lag))
 	myreplies := []string{"ERR_NONICKNAMEGIVEN", "ERR_ERRONEUSNICKNAME", "ERR_NICKNAMEINUSE", "ERR_NICKCOLLISION"}
 	if newnick == "" {
 		return n.nick, nil
@@ -174,16 +174,16 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 	}
 	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
-		if err := n.RegListener(replies[rep], t, repch); err != nil {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			for _, rep := range myreplies {
-				n.DelListener(replies[rep], t)
+				n.Listen.DelListener(replies[rep], t)
 			}
 			return n.nick, os.NewError("Unable to register new listener")
 		}
 	}
 	defer func(myreplies []string, t string, tick *time.Ticker) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
 		tick.Stop()
 		return
@@ -209,8 +209,8 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 
 func (n *Network) User(newuser string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
-	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}
+	ticker := time.NewTicker(timeout(n.lag))
+	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED", "RPL_ENDOFMOTD", "ERR_NOTREGISTERED"}
 	if newuser == "" {
 		return n.user, nil
 	} else if len(newuser) > 9 {
@@ -218,13 +218,13 @@ func (n *Network) User(newuser string) (string, os.Error) {
 	}
 	repch := make(chan *IrcMessage)
 	for _, rep := range myreplies {
-		if err := n.RegListener(replies[rep], t, repch); err != nil {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			return "", os.NewError(fmt.Sprintf("Couldn't register Listener for %s: %s", replies[rep], err.String()))
 		}
 	}
 	defer func(myreplies []string, t string, tick *time.Ticker) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
 		tick.Stop()
 		return
@@ -236,6 +236,10 @@ func (n *Network) User(newuser string) (string, os.Error) {
 			return n.user, os.NewError("ERR_NEEDMOREPARAMS")
 		} else if msg.Cmd == replies["ERR_ALREADYREGISTRED"] {
 			return n.user, os.NewError("ERR_ALREADYREGISTRED")
+		} else if msg.Cmd == replies["ERR_NOTREGISTERED"] {
+			return n.user, os.NewError("ERR_NOTREGISTERED")
+		} else if msg.Cmd == replies["RPL_ENDOFMOTD"] {
+			return n.user, nil
 		}
 	case <-ticker.C:
 		n.user = newuser
@@ -252,12 +256,12 @@ func (n *Network) Realname(newrn string) string {
 	return n.realname
 }
 
-func (n *Network) NetName(newname string) string {
+func (n *Network) NetName(newname string, reason string) (string, os.Error) {
 	if newname != "" {
 		n.network = newname
-		//TODO: reconnect
+		return n.network, n.Reconnect(reason)
 	}
-	return n.network
+	return n.network, nil
 }
 
 func (n *Network) SysOpMe(user, pass string) {
@@ -292,14 +296,14 @@ func (n *Network) Join(chans []string, keys []string) os.Error {
 			return os.NewError(fmt.Sprintf("Channel %s contains illegal characters", ch))
 		}
 	}
-	repch := make(chan *IrcMessage)
+	repch := make(chan *IrcMessage, 10)
 	defer func(myreplies []string, t string) {
 		for _, rep := range myreplies {
 			_, ok := replies[rep]
 			if ok {
-				n.DelListener(replies[rep], t)
+				n.Listen.DelListener(replies[rep], t)
 			} else {
-				n.DelListener(rep, t)
+				n.Listen.DelListener(rep, t)
 			}
 		}
 		return
@@ -307,11 +311,11 @@ func (n *Network) Join(chans []string, keys []string) os.Error {
 	for _, rep := range myreplies {
 		_, ok := replies[rep]
 		if ok {
-			if err := n.RegListener(replies[rep], t, repch); err != nil {
+			if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 				return os.NewError(fmt.Sprintf("Couldn't register listener %s: %s", replies[rep], err.String()))
 			}
 		} else {
-			if err := n.RegListener(rep, t, repch); err != nil {
+			if err := n.Listen.RegListener(rep, t, repch); err != nil {
 				return os.NewError(fmt.Sprintf("Couldn't register listener %s: %s", rep, err.String()))
 			}
 		}
@@ -462,20 +466,20 @@ func (n *Network) Kick(ch, target, reason string) {
 
 func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make privmsg hack up messages that are too long
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(timeout(n.lag)) //timeout in lag+5 seconds
+	ticker := time.NewTicker(timeout(n.lag))
 	myreplies := []string{"ERR_NORECIPIENT", "ERR_NOTEXTTOSEND",
 		"ERR_CANNOTSENDTOCHAN", "ERR_NOTOPLEVEL",
 		"ERR_WILDTOPLEVEL", "ERR_TOOMANYTARGETS",
 		"ERR_NOSUCHNICK", "RPL_AWAY"}
-	repch := make(chan *IrcMessage)
+	repch := make(chan *IrcMessage, 10)
 	for _, rep := range myreplies {
-		if err := n.RegListener(replies[rep], t, repch); err != nil {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			return os.NewError(fmt.Sprintf("Couldn't register nick %s: %s", replies[rep], err.String()))
 		}
 	}
 	defer func(myreplies []string, t string) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
 		return
 	}(myreplies, t)
@@ -499,7 +503,7 @@ func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make pr
 	return nil
 }
 
-func (n *Network) Notice(target, text string) {
+func (n *Network) Notice(target, text string) { //BUG: make notice hack up messages that are too long
 	n.queueOut <- fmt.Sprintf("NOTICE %s :%s", target, text)
 	//TODO: replies:
 	//ERR_NORECIPIENT                 ERR_NOTEXTTOSEND
@@ -520,22 +524,22 @@ func (n *Network) Who(target string) {
 
 func (n *Network) Whois(target []string, server string) map[string][]string { //TODO: return a map[string][][]string? map[string][]IrcMessage?
 	t := strconv.Itoa64(time.Nanoseconds())
-	ticker := time.NewTicker(timeout(n.lag)) //timeout after lag+5 seconds
+	ticker := time.NewTicker(timeout(n.lag))
 	myreplies := []string{"ERR_NOSUCHSERVER", "ERR_NONICKNAMEGIVEN",
 		"RPL_WHOISUSER", "RPL_WHOISCHANNELS",
 		"RPL_WHOISSERVER", "RPL_AWAY",
 		"RPL_WHOISOPERATOR", "RPL_WHOISIDLE",
 		"ERR_NOSUCHNICK", "RPL_ENDOFWHOIS"}
-	repch := make(chan *IrcMessage)
+	repch := make(chan *IrcMessage, 10)
 	for _, rep := range myreplies {
-		if err := n.RegListener(replies[rep], t, repch); err != nil {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			n.l.Printf("Couldn't whois %d=%s: %s", replies[rep], rep, err.String())
 			os.Exit(1)
 		}
 	}
 	defer func(myreplies []string, t string) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
 		return
 	}(myreplies, t)
@@ -591,18 +595,18 @@ func (n *Network) PingNick(nick string) {
 func (n *Network) Ping() (int64, os.Error) {
 	myreplies := []string{"ERR_NOORIGIN", "ERR_NOSUCHSERVER"}
 	t := strconv.Itoa64(time.Nanoseconds())
-	repch := make(chan *IrcMessage)
+	repch := make(chan *IrcMessage, 10)
 	ticker := time.NewTicker(timeout(n.lag))
 	for _, rep := range myreplies {
-		n.RegListener(replies[rep], t, repch)
+		n.Listen.RegListener(replies[rep], t, repch)
 	}
-	n.RegListener("PONG", t, repch)
+	n.Listen.RegListener("PONG", t, repch)
 	var rep *IrcMessage
 	defer func(myreplies []string, t string, n *Network, tick *time.Ticker) {
 		for _, rep := range myreplies {
-			n.DelListener(replies[rep], t)
+			n.Listen.DelListener(replies[rep], t)
 		}
-		n.DelListener("PONG", t)
+		n.Listen.DelListener("PONG", t)
 		tick.Stop()
 		return
 	}(myreplies, t, n, ticker)

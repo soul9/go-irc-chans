@@ -17,17 +17,6 @@ func runAsync(f func(*testing.T, *Network, []string), t *testing.T, n *Network, 
 }
 
 func joinTests(t *testing.T, n *Network, tchs []string) {
-	//join a single channel
-	if err := n.Join(tchs[:1], []string{}); err != nil {
-		t.Errorf("Join error: tried to join channel %s, got error %s", tchs[:1], err.String())
-	}
-	n.Part(tchs[:1], "Gone phishing")
-	n.Ping()
-	//join a single channel
-	if err := n.Join(tchs[1:2], []string{}); err != nil {
-		t.Errorf("Join error: tried to join channel %s, got error %s", tchs[1:2], err.String())
-	}
-	n.Part(tchs[1:2], "Gone phishing")
 	n.Ping()
 	//join two channels (shouldn't be too many)
 	if err := n.Join(tchs[len(tchs)-2:], []string{}); err != nil {
@@ -45,7 +34,6 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 		if err := n.Join(tchs[i:i+1], []string{}); err != nil {
 			t.Errorf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
 		}
-		n.Ping()
 		n.Part(tchs[i:i+1], "Gone phishing")
 		time.Sleep(second)
 	}
@@ -59,23 +47,23 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 	donech := make(chan bool)
 	done := 0
 	//stress-test
-	numtests := 200
-	parallel := 20
+	numtests := 2000
+	parallel := 30
 	msgfmt := "Stress-testing %d"
 	nick, _ := n.Nick("")
 	msgparamfmt := fmt.Sprintf("%s :%s", nick, msgfmt)
 	testfunc := func(dch chan bool, n *Network, tchs []string, i int) {
-		ch := make(chan *IrcMessage, 1)
-		if err := n.RegListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i), ch); err != nil {
+		ch := make(chan *IrcMessage, parallel+10)
+		if err := n.Listen.RegListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i), ch); err != nil {
 			t.Errorf("Register error: tried to register cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 		}
 		go n.Privmsg([]string{nick}, fmt.Sprintf(msgfmt, i))
-		timeout := time.NewTicker(minute / 4)
+		timeout := time.NewTicker(minute / 2)
 		for {
 			select {
 			case msg := <-ch:
 				if strings.Join(msg.Params, " ") == fmt.Sprintf(msgparamfmt, i) {
-					err := n.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
+					err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
 					if err != nil {
 						t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 					}
@@ -85,6 +73,10 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 				}
 			case <-timeout.C:
 				t.Errorf("Stress-test error: didn't receive sent message: %d", i)
+				err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
+				if err != nil {
+					t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+				}
 				timeout.Stop()
 				dch <- true
 				return
@@ -144,6 +136,7 @@ func TestIrc(t *testing.T) {
 		ret = append(ret, "#soul9")
 		return ret
 	}()
+	//	network := "irc.didntdoit.net:16697"
 	network := "irc.r0x0r.me:6667"
 	nick := "ircchantest"
 	user := "nottelling"
@@ -157,15 +150,23 @@ func TestIrc(t *testing.T) {
 	}
 	done := make(chan bool)
 	jobs := 0
+	n.Ping()
 	go runAsync(joinTests, t, n, testChans, done)
 	<-done
+	n.Ping()
 	go runAsync(privmsgTests, t, n, testChans, done)
 	<-done
+	n.Ping()
 	go runAsync(privmsgStressTests, t, n, testChans, done)
 	jobs++
 	for jobs > 0 {
 		<-done
 		jobs--
+	}
+
+	if err := n.Reconnect("You're no fun anymore"); err != nil {
+		t.Errorf("Reconnect error: tried to connect to %s, got error %s", network, err.String())
+		return
 	}
 
 	n.Disconnect("You're no fun anymore") //TODO err?
