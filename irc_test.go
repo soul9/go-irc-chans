@@ -112,7 +112,7 @@ func privmsgTests(t *testing.T, n *Network, tchs []string) {
 	}
 	//test single privmsgs
 	for _, ch := range tchs {
-		err := n.Privmsg([]string{ch}, "Testing ☺")
+		err := n.Privmsg([]string{ch}, "Testing☺")
 		if err != nil {
 			t.Errorf("Privmsg error: tried to send message to %s, got error %s", ch, err.String())
 		}
