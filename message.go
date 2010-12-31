@@ -1,5 +1,12 @@
 package ircchans
 
+import (
+	"os"
+	"strings"
+	"bytes"
+	"fmt"
+)
+
 type IrcMessage struct {
 	Prefix string
 	Cmd    string

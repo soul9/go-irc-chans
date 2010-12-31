@@ -5,7 +5,6 @@ import (
 	"net"
 	"log"
 	"fmt"
-	"bytes"
 	"strings"
 	"bufio"
 	"time"
