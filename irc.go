@@ -195,7 +195,7 @@ func (n *Network) sender() {
 		err, m := PackMsg(msg)
 		if err == nil {
 			if n.conn == nil || n.buf == nil {
-				n.l.Printf("Error writing message (%s): No connection", err.String(), msg)
+				n.l.Printf("Error writing message (%s): No connection", msg)
 			}
 			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
 			if err != nil {
@@ -229,6 +229,10 @@ func (n *Network) sender() {
 
 func (n *Network) receiver() {
 	for {
+		if n.buf == nil {
+			time.Sleep(minute / 4) //try again in 15 seconds
+			continue
+		}
 		l, err := n.buf.ReadString('\n')
 		if err != nil {
 			n.l.Println("Can't read: socket: ", err.String())
