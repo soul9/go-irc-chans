@@ -189,9 +189,6 @@ func (n *Network) Disconnect(reason string) {
 func (n *Network) sender() {
 	for {
 		msg := <-n.queueOut
-		if n.conn == nil {
-			continue
-		}
 		err, m := PackMsg(msg)
 		if err == nil {
 			if n.conn == nil || n.buf == nil {
