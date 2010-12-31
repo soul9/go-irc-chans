@@ -171,3 +171,4 @@ func TestIrc(t *testing.T) {
 
 	n.Disconnect("You're no fun anymore") //TODO err?
 }
+//TODO: test ctcp(?), ping, ..

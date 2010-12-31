@@ -13,8 +13,9 @@ func (n *Network) ctcp() {
 	for !closed(ch) {
 		p := <-ch
 		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 {
-			ctype := p.Params[1][1:i]
-			dst := strings.Split(p.Prefix, "!", -1)[0]
+			p.Params[1] = strings.Trim(p.Params[1], "\x01")
+			ctype := p.Params[1]
+			dst := strings.Split(p.Prefix, "!", 1)[0]
 			switch {
 			case ctype == "VERSION":
 				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
@@ -28,7 +29,7 @@ func (n *Network) ctcp() {
 					n.l.Println("Illegal ctcp ping received: No arguments", p)
 					break
 				}
-				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params, " ")))
+				n.Notice(dst, fmt.Sprintf("\x01PING %s\x01", strings.Join(params[1:], " ")))
 			case ctype == "TIME":
 				n.Notice(dst, fmt.Sprintf("\x01TIME %s\x01", time.LocalTime().String()))
 				//TODO: ACTION, PAGE?
