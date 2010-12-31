@@ -51,7 +51,7 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 	parallel := 30
 	msgfmt := "Stress-testing %d"
 	nick, _ := n.Nick("")
-	msgparamfmt := fmt.Sprintf("%s :%s", nick, msgfmt)
+	msgparamfmt := fmt.Sprintf("%s %s", nick, msgfmt)
 	testfunc := func(dch chan bool, n *Network, tchs []string, i int) {
 		ch := make(chan *IrcMessage, parallel+10)
 		if err := n.Listen.RegListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i), ch); err != nil {

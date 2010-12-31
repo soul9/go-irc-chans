@@ -327,7 +327,7 @@ func (n *Network) Join(chans []string, keys []string) os.Error {
 		case msg := <-repch:
 			if msg.Cmd == "JOIN" {
 				for _, chn := range chans {
-					if msg.Params[0] == fmt.Sprintf(":%s", chn) {
+					if msg.Params[0] == chn {
 						joined++
 						break
 					}
@@ -617,7 +617,7 @@ func (n *Network) Ping() (int64, os.Error) {
 	case rep = <-repch:
 	}
 	if rep.Cmd == "PONG" {
-		origtime, err := strconv.Atoi64(rep.Params[len(rep.Params)-1][1:])
+		origtime, err := strconv.Atoi64(rep.Params[len(rep.Params)-1])
 		if err == nil {
 			n.lag = time.Nanoseconds() - origtime
 			return n.lag, err
