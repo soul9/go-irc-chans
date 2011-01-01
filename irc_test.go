@@ -20,19 +20,19 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 	n.Ping()
 	//join two channels (shouldn't be too many)
 	if err := n.Join(tchs[len(tchs)-2:], []string{}); err != nil {
-		t.Errorf("Join error: tried to join channels %#v, got error %s", tchs[len(tchs)-2:], err.String())
+		t.Fatalf("Join error: tried to join channels %#v, got error %s", tchs[len(tchs)-2:], err.String())
 	}
 	n.Part(tchs[1:2], "Gone phishing")
 	n.Ping()
 	//join too many chans
 	if err := n.Join(tchs, []string{}); err == nil {
-		t.Errorf("Join error: tried to join too many channels (%#v), didn't get any error", tchs)
+		t.Fatalf("Join error: tried to join too many channels (%#v), didn't get any error", tchs)
 	}
 	n.Part(tchs, "Gone phishing")
 	n.Ping()
 	for i, _ := range tchs {
 		if err := n.Join(tchs[i:i+1], []string{}); err != nil {
-			t.Errorf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
+			t.Fatalf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
 		}
 		n.Part(tchs[i:i+1], "Gone phishing")
 		time.Sleep(second)
@@ -42,20 +42,20 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 
 func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 	if err := n.Join(tchs[len(tchs)-1:], []string{}); err != nil {
-		t.Errorf("Join error: tried to join channel %s, got error %s", tchs[:1], err.String())
+		t.Fatalf("Join error: tried to join channel %s, got error %s", tchs[:1], err.String())
 	}
 	donech := make(chan bool)
 	done := 0
 	//stress-test
-	numtests := 2000
-	parallel := 30
+	numtests := 400
+	parallel := 10
 	msgfmt := "Stress-testing %d"
 	nick, _ := n.Nick("")
 	msgparamfmt := fmt.Sprintf("%s %s", nick, msgfmt)
 	testfunc := func(dch chan bool, n *Network, tchs []string, i int) {
 		ch := make(chan *IrcMessage, parallel+10)
 		if err := n.Listen.RegListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i), ch); err != nil {
-			t.Errorf("Register error: tried to register cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+			t.Fatalf("Register error: tried to register cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 		}
 		go n.Privmsg([]string{nick}, fmt.Sprintf(msgfmt, i))
 		timeout := time.NewTicker(minute / 2)
@@ -65,17 +65,17 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 				if strings.Join(msg.Params, " ") == fmt.Sprintf(msgparamfmt, i) {
 					err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
 					if err != nil {
-						t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+						t.Fatalf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 					}
 					dch <- true
 					timeout.Stop()
 					return
 				}
 			case <-timeout.C:
-				t.Errorf("Stress-test error: didn't receive sent message: %d", i)
+				t.Fatalf("Stress-test error: didn't receive sent message: %d", i)
 				err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
 				if err != nil {
-					t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+					t.Fatalf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 				}
 				timeout.Stop()
 				dch <- true
@@ -104,17 +104,17 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 func privmsgTests(t *testing.T, n *Network, tchs []string) {
 	//test privmsg to too many recipients
 	if err := n.Privmsg(tchs, "testing ☺"); err == nil {
-		t.Errorf("Privmsg error: tried to send message to too many nicks (%#v), didn't get an error", tchs)
+		t.Fatalf("Privmsg error: tried to send message to too many nicks (%#v), didn't get an error", tchs)
 	}
 	//try privmsg to unjoined channel
 	if err := n.Privmsg(tchs[0:2], "testing ☺"); err == nil {
-		t.Errorf("Privmsg error: tried to send message to unjoined channel (%#v), didn't get an error", tchs[0:2])
+		t.Fatalf("Privmsg error: tried to send message to unjoined channel (%#v), didn't get an error", tchs[0:2])
 	}
 	//test single privmsgs
 	for _, ch := range tchs {
 		err := n.Privmsg([]string{ch}, "Testing☺")
 		if err != nil {
-			t.Errorf("Privmsg error: tried to send message to %s, got error %s", ch, err.String())
+			t.Fatalf("Privmsg error: tried to send message to %s, got error %s", ch, err.String())
 		}
 	}
 	return
@@ -145,7 +145,7 @@ func TestIrc(t *testing.T) {
 	logfile := ""
 	n := NewNetwork(network, nick, user, realname, password, logfile)
 	if err := n.Connect(); err != nil {
-		t.Errorf("Connect error: tried to connect to %s, got error %s", network, err.String())
+		t.Fatalf("Connect error: tried to connect to %s, got error %s", network, err.String())
 		return
 	}
 	done := make(chan bool)
@@ -165,7 +165,7 @@ func TestIrc(t *testing.T) {
 	}
 
 	if err := n.Reconnect("You're no fun anymore"); err != nil {
-		t.Errorf("Reconnect error: tried to connect to %s, got error %s", network, err.String())
+		t.Fatalf("Reconnect error: tried to connect to %s, got error %s", network, err.String())
 		return
 	}
 

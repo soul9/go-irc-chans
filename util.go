@@ -52,9 +52,9 @@ func (n *Network) logger() {
 	for {
 		select {
 		case m := <-inch:
-			n.l.Printf("<<< %s", m.String())
+			n.l.Printf("<<< %#v", m)
 		case m := <-outch:
-			n.l.Printf(">>> %s", m.String())
+			n.l.Printf(">>> %#v", m)
 		}
 	}
 	n.Listen.DelListener("*", "logger")

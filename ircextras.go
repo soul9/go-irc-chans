@@ -277,7 +277,7 @@ func (n *Network) Quit(reason string) {
 	return
 }
 
-func (n *Network) Join(chans []string, keys []string) os.Error {
+func (n *Network) Join(chans []string, keys []string) os.Error { //return: topic, list?
 	if len(chans) == 0 {
 		return os.NewError("No channels given")
 	}
