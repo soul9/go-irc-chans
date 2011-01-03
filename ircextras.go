@@ -134,6 +134,41 @@ func timeout(lag int64) int64 {
 	return t
 }
 
+func (n *Network) Register() os.Error {
+	var err os.Error
+	if n.password != "" {
+		err = n.Pass()
+		if err != nil {
+			return os.NewError("Couldn't register with password")
+		}
+	}
+	nret := make(chan bool)
+	go func(n *Network, ret chan bool) {
+		_, err = n.Nick(n.nick)
+		i := 0
+		for err != nil {
+			if i > 8 {
+				ret <- false
+				return
+			}
+			n.nick = fmt.Sprintf("_%s", n.nick)
+			_, err = n.Nick(n.nick)
+			i++
+		}
+		ret <- true
+		return
+	}(n, nret)
+	//TODO: reglistener for cmd 001 (welcome) which means user and nick commands were successful
+	n.user, err = n.User(n.user)
+	if err != nil {
+		return os.NewError("Unable to register username")
+	}
+	if ok := <-nret; !ok {
+		return os.NewError("Failed to acquire any alternate nick")
+	}
+	return nil
+}
+
 func (n *Network) Pass() os.Error {
 	t := strconv.Itoa64(time.Nanoseconds())
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED"}

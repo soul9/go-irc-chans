@@ -33,6 +33,7 @@ func main() {
 		rnf = nickf
 	}
 	log.Println(*netf, *nickf, *userf, *rnf, *passf, *logfile)
+	channels := []string{"#soul9"}
 	n := ircchans.NewNetwork(*netf, *nickf, *userf, *rnf, *passf, *logfile)
 	//test replies, outgoing messages
 	go func() {
@@ -60,7 +61,8 @@ func main() {
 					fmt.Printf("Connection failed: %s", err.String())
 					time.Sleep(minute / 12)
 				}
-				if err := n.Join([]string{"#soul9"}, []string{}); err != nil {
+				if err := n.Join(channels, []string{}); err != nil {
+					fmt.Println("Error joining channels %v\n", channels)
 					os.Exit(1)
 				}
 			}

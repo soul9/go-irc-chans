@@ -3,7 +3,13 @@ package ircchans
 import (
 	"os"
 	"fmt"
+	"sync"
 )
+
+type dispatchMap struct {
+	lock  *sync.RWMutex
+	chans map[string]map[string]chan *IrcMessage //wildcard * is for any message
+}
 
 func (m *dispatchMap) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
 	m.lock.Lock()
@@ -33,4 +39,16 @@ func (m *dispatchMap) DelListener(cmd, name string) os.Error {
 		m.chans[cmd] = nil, false
 	}
 	return nil
+}
+
+func (m *dispatchMap) dispatch(msg IrcMessage) {
+	m.lock.RLock()
+	for _, ch := range m.chans[msg.Cmd] {
+		_ = ch <- &msg
+	}
+	for _, ch := range m.chans["*"] {
+		_ = ch <- &msg
+	}
+	m.lock.RUnlock()
+	return
 }

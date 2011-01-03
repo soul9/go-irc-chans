@@ -47,10 +47,6 @@ type Network struct {
 	Listen, OutListen dispatchMap
 }
 
-type dispatchMap struct {
-	lock  *sync.RWMutex
-	chans map[string]map[string]chan *IrcMessage //wildcard * is for any message
-}
 
 func CustomTlsConf() (*tls.Config, os.Error) {
 	err := os.MkdirAll(tlsconfdir, 0751)
@@ -142,40 +138,10 @@ func (n *Network) Connect() os.Error {
 	n.Disconnected = false
 	n.l.Printf("Connected to network %s, server %s\n", n.network, n.server)
 	go n.receiver()
-	if n.password != "" {
-		err = n.Pass()
-		if err != nil {
-			n.Disconnect("Couldn't authenticate with password")
-			return os.NewError("Couldn't register with password")
-		}
-	}
-	nret := make(chan bool)
-	go func(n *Network, ret chan bool) {
-		_, err = n.Nick(n.nick)
-		i := 0
-		for err != nil {
-			if i > 8 {
-				ret <- false
-				return
-			}
-			n.nick = fmt.Sprintf("_%s", n.nick)
-			_, err = n.Nick(n.nick)
-			i++
-		}
-		ret <- true
-		return
-	}(n, nret)
-	//TODO: reglistener for cmd 001 (welcome) which means user and nick commands were successful
-	n.user, err = n.User(n.user)
+	err = n.Register()
 	if err != nil {
-		n.Disconnect("Couldn't register user")
-		return os.NewError("Unable to register username")
+		return os.NewError(fmt.Sprintf("Couldn't register to network %s: %s.\n", n.network, err.String()))
 	}
-	if ok := <-nret; !ok {
-		n.Disconnect("Failed to acquire any alternate nick")
-		return os.NewError("Failed to acquire any alternate nick")
-	}
-	time.Sleep(second) //sleep a second so the lag is more realistic
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 	if n.Disconnected == true {
@@ -220,18 +186,7 @@ func (n *Network) sender() {
 				n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
 				continue
 			}
-			//dispatch
-			go func(msg IrcMessage) {
-				n.OutListen.lock.RLock()
-				for _, ch := range n.OutListen.chans[msg.Cmd] {
-					_ = ch <- &msg
-				}
-				for _, ch := range n.OutListen.chans["*"] {
-					_ = ch <- &msg
-				}
-				n.OutListen.lock.RUnlock()
-				return
-			}(m)
+			go n.OutListen.dispatch(m)
 		} else {
 			n.l.Println("Couldn't send malformed message: ", msg)
 		}
@@ -258,17 +213,7 @@ func (n *Network) receiver() {
 			continue
 		}
 		//dispatch
-		go func(msg IrcMessage) {
-			n.Listen.lock.RLock()
-			for _, ch := range n.Listen.chans[msg.Cmd] {
-				_ = ch <- &msg
-			}
-			for _, ch := range n.Listen.chans["*"] {
-				_ = ch <- &msg
-			}
-			n.Listen.lock.RUnlock()
-			return
-		}(msg)
+		go n.Listen.dispatch(msg)
 	}
 	n.l.Println("Something went terribly wrong, receiver exiting")
 	return
