@@ -3,13 +3,15 @@ package main
 import (
 	"flag"
 	"os"
-	"ircchans"
+	"github.com/soul9/go-irc-chans" //ircchans
 	"log"
 	"time"
 	"fmt"
-	//	"strings"
+	"runtime"
+	"strings"
 )
-const minute  = 1000 * 1000 * 1000 * 60
+
+const minute = 1000 * 1000 * 1000 * 60
 
 func main() {
 	netf := flag.String("net", "viotest.local:6667", "Network name in the form of network.dom:port")
@@ -33,19 +35,19 @@ func main() {
 	log.Println(*netf, *nickf, *userf, *rnf, *passf, *logfile)
 	n := ircchans.NewNetwork(*netf, *nickf, *userf, *rnf, *passf, *logfile)
 	//test replies, outgoing messages
-	/*	go func(){
-			chin := make(chan *ircchans.IrcMessage, 100)
-			n.RegListener("PRIVMSG", "testreply", chin)
-			for !closed(chin) {
-				msg := <- chin
-				if msg.Params[0], _ == n.Nick("") {
-					n.Privmsg([]string{msg.Prefix}, strings.Join(msg.Params[1:], " ")[1:])
-				} else {
-					n.Privmsg(msg.Params[:1], strings.Join(msg.Params[1:], " ")[1:])
-				}
+	go func() {
+		chin := make(chan *ircchans.IrcMessage, 100)
+		n.Listen.RegListener("PRIVMSG", "testreply", chin)
+		for !closed(chin) {
+			msg := <-chin
+			nick, err := n.Nick("")
+			if err == nil && msg.Params[0] == nick && msg.Params[1] == "memusage" {
+				targ := strings.Split(msg.Prefix, "!", 2)
+				n.Privmsg([]string{targ[0]}, fmt.Sprintf("Currently allocated: %.2fMb, taken from system: %.2fMb.", float(runtime.MemStats.Alloc)/1024/1024, float(runtime.MemStats.Sys)/1024/1024))
 			}
-		}()
-	*/
+		}
+		n.Listen.DelListener("PRIVMSG", "testreply")
+	}()
 	ticker := time.Tick(1000 * 1000 * 1000 * 15)
 	ticker15 := time.Tick(1000 * 1000 * 1000 * 60 * 15)
 	for !closed(ticker) {
@@ -56,7 +58,7 @@ func main() {
 				fmt.Println("Disconnected")
 				for err := n.Connect(); err != nil; err = n.Connect() {
 					fmt.Printf("Connection failed: %s", err.String())
-					time.Sleep(minute/12)
+					time.Sleep(minute / 12)
 				}
 				if err := n.Join([]string{"#soul9"}, []string{}); err != nil {
 					os.Exit(1)

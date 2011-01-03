@@ -13,10 +13,10 @@ import "bitbucket.org/kylelemons/jaid/src/pkg/irc"
 
 
 const (
-	maxchans = 10
-	clients = 4
+	maxchans   = 10
+	clients    = 4
 	sslclients = 4
-	logfile = "test/test.log"
+	logfile    = "test/test.log"
 )
 
 func runAsync(f func(*testing.T, *Network, []string), t *testing.T, n *Network, tchs []string, ch chan bool) {
@@ -41,7 +41,7 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 		if err := n.Join(tchs[i:i+1], []string{}); err != nil {
 			t.Errorf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
 		}
-		time.Sleep(second/2)
+		time.Sleep(second / 2)
 		n.Part(tchs[i:i+1], "Gone phishing")
 		time.Sleep(second)
 	}
@@ -148,7 +148,7 @@ func doIrcStuff(n *Network, t *testing.T, tchs []string, done chan bool) {
 		<-d
 		jobs--
 	}
-	
+
 	if err := n.Reconnect("Testing reconnect"); err != nil {
 		t.Fatalf("Reconnect error: tried to connect to %s, got error %s", net, err.String())
 	}
@@ -169,7 +169,7 @@ func doIrcStuff(n *Network, t *testing.T, tchs []string, done chan bool) {
 		jobs--
 	}
 	n.Disconnect("You're no fun anymore.")
-	done <-true
+	done <- true
 }
 
 func TestIrc(t *testing.T) {
@@ -179,7 +179,7 @@ func TestIrc(t *testing.T) {
 		t.Fatal("Test server shut down")
 		os.Exit(1)
 	}()
-	time.Sleep(minute/4) //wait for jaid to start up
+	time.Sleep(minute / 4) //wait for jaid to start up
 	rand.Seed(time.Nanoseconds())
 
 	testChans := func() []string {
@@ -206,12 +206,12 @@ func TestIrc(t *testing.T) {
 	sslcls := make([]*Network, sslclients)
 	jobs := 0
 	done := make(chan bool)
-	for i:=0; i<clients; i++ {
+	for i := 0; i < clients; i++ {
 		cls[i] = NewNetwork(network, nick, user, realname, password, logfile)
 		go doIrcStuff(cls[i], t, testChans(), done)
 		jobs++
 	}
-	for i:=0; i<clients; i++ {
+	for i := 0; i < clients; i++ {
 		sslcls[i] = NewNetwork(sslnetwork, nick, user, realname, password, logfile)
 		go doIrcStuff(sslcls[i], t, testChans(), done)
 		jobs++

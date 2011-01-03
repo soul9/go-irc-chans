@@ -128,7 +128,7 @@ var replies = map[string]string{
 
 func timeout(lag int64) int64 {
 	t := lag * 10
-	if t > second * 15 {
+	if t > second*15 {
 		return second * 15
 	}
 	return t

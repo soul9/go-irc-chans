@@ -27,7 +27,7 @@ var (
 	tlsconfdir = confdir + "/tls"
 	certfile   = tlsconfdir + "/clientcert.pem"
 	keyfile    = tlsconfdir + "/clientkey.pem"
-	t = time.Tick(second)  //wake the ticker every second (buggy ticker!)
+	t          = time.Tick(second) //wake the ticker every second (buggy ticker!)
 )
 
 type Network struct {
@@ -150,21 +150,22 @@ func (n *Network) Connect() os.Error {
 		}
 	}
 	nret := make(chan bool)
-	go func(n *Network, ret chan bool){
+	go func(n *Network, ret chan bool) {
 		_, err = n.Nick(n.nick)
 		i := 0
 		for err != nil {
 			if i > 8 {
-				ret <-false
+				ret <- false
 				return
 			}
 			n.nick = fmt.Sprintf("_%s", n.nick)
 			_, err = n.Nick(n.nick)
 			i++
 		}
-		ret <-true
+		ret <- true
 		return
 	}(n, nret)
+	//TODO: reglistener for cmd 001 (welcome) which means user and nick commands were successful
 	n.user, err = n.User(n.user)
 	if err != nil {
 		n.Disconnect("Couldn't register user")
