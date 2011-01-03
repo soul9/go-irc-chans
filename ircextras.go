@@ -127,7 +127,11 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	return lag * 10
+	t := lag * 10
+	if t > second * 15 {
+		return second * 15
+	}
+	return t
 }
 
 func (n *Network) Pass() os.Error {
@@ -164,6 +168,7 @@ func (n *Network) Pass() os.Error {
 func (n *Network) Nick(newnick string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
 	ticker := time.NewTicker(timeout(n.lag))
+	defer ticker.Stop()
 	myreplies := []string{"ERR_NONICKNAMEGIVEN", "ERR_ERRONEUSNICKNAME", "ERR_NICKNAMEINUSE", "ERR_NICKCOLLISION"}
 	if newnick == "" {
 		return n.nick, nil
@@ -173,6 +178,12 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 		newnick = newnick[:9]
 	}
 	repch := make(chan *IrcMessage)
+	defer func(myreplies []string, t string) {
+		for _, rep := range myreplies {
+			n.Listen.DelListener(replies[rep], t)
+		}
+		return
+	}(myreplies, t)
 	for _, rep := range myreplies {
 		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			for _, rep := range myreplies {
@@ -181,13 +192,6 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 			return n.nick, os.NewError("Unable to register new listener")
 		}
 	}
-	defer func(myreplies []string, t string, tick *time.Ticker) {
-		for _, rep := range myreplies {
-			n.Listen.DelListener(replies[rep], t)
-		}
-		tick.Stop()
-		return
-	}(myreplies, t, ticker)
 	n.queueOut <- fmt.Sprintf("NICK %s", newnick)
 	select {
 	case msg := <-repch:
@@ -210,6 +214,7 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 func (n *Network) User(newuser string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
 	ticker := time.NewTicker(timeout(n.lag))
+	defer ticker.Stop()
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED", "RPL_ENDOFMOTD", "ERR_NOTREGISTERED"}
 	if newuser == "" {
 		return n.user, nil
@@ -217,18 +222,17 @@ func (n *Network) User(newuser string) (string, os.Error) {
 		newuser = newuser[:9]
 	}
 	repch := make(chan *IrcMessage)
+	defer func(myreplies []string, t string) {
+		for _, rep := range myreplies {
+			n.Listen.DelListener(replies[rep], t)
+		}
+		return
+	}(myreplies, t)
 	for _, rep := range myreplies {
 		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			return "", os.NewError(fmt.Sprintf("Couldn't register Listener for %s: %s", replies[rep], err.String()))
 		}
 	}
-	defer func(myreplies []string, t string, tick *time.Ticker) {
-		for _, rep := range myreplies {
-			n.Listen.DelListener(replies[rep], t)
-		}
-		tick.Stop()
-		return
-	}(myreplies, t, ticker)
 	n.queueOut <- fmt.Sprintf("USER %s 0.0.0.0 0.0.0.0 :%s", n.user, n.realname)
 	select {
 	case msg := <-repch:
@@ -336,17 +340,20 @@ func (n *Network) Join(chans []string, keys []string) os.Error { //return: topic
 				for key, _ := range replies {
 					if replies[key] == msg.Cmd {
 						if key[:3] == "ERR" {
+							ticker.Stop()
 							return os.NewError(key)
 						}
 					}
 				}
 			}
 			if joined == len(chans) {
+				ticker.Stop()
 				return nil
 			}
 			ticker.Stop()
 			ticker = time.NewTicker(timeout(n.lag))
 		case <-ticker.C:
+			ticker.Stop()
 			return os.NewError("Didn't receive join reply")
 		}
 	}
@@ -489,6 +496,7 @@ func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make pr
 		case msg := <-repch:
 			for key, _ := range replies {
 				if replies[key] == msg.Cmd && key[:3] == "ERR" {
+					ticker.Stop()
 					return os.NewError(key)
 				}
 			}
@@ -597,19 +605,19 @@ func (n *Network) Ping() (int64, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
 	repch := make(chan *IrcMessage, 10)
 	ticker := time.NewTicker(timeout(n.lag))
+	defer ticker.Stop()
+	defer func(myreplies []string, t string, n *Network) {
+		for _, rep := range myreplies {
+			n.Listen.DelListener(replies[rep], t)
+		}
+		n.Listen.DelListener("PONG", t)
+		return
+	}(myreplies, t, n)
 	for _, rep := range myreplies {
 		n.Listen.RegListener(replies[rep], t, repch)
 	}
 	n.Listen.RegListener("PONG", t, repch)
 	var rep *IrcMessage
-	defer func(myreplies []string, t string, n *Network, tick *time.Ticker) {
-		for _, rep := range myreplies {
-			n.Listen.DelListener(replies[rep], t)
-		}
-		n.Listen.DelListener("PONG", t)
-		tick.Stop()
-		return
-	}(myreplies, t, n, ticker)
 	n.queueOut <- fmt.Sprintf("PING %d", time.Nanoseconds())
 	select {
 	case <-ticker.C:

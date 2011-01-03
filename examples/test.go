@@ -58,7 +58,9 @@ func main() {
 					fmt.Printf("Connection failed: %s", err.String())
 					time.Sleep(minute/12)
 				}
-				n.Join([]string{"#soul9"}, []string{})
+				if err := n.Join([]string{"#soul9"}, []string{}); err != nil {
+					os.Exit(1)
+				}
 			}
 		case <-ticker15:
 			nick, _ := n.Nick("")

@@ -6,9 +6,18 @@ import (
 	"rand"
 	"fmt"
 	"strings"
+	"os"
 )
+//test server
+import "bitbucket.org/kylelemons/jaid/src/pkg/irc"
 
-var maxchans = 8 //BUG: (join doesn't return error, should handle when too many chans) join maximum number of chans on testing server
+
+const (
+	maxchans = 10
+	clients = 4
+	sslclients = 4
+	logfile = "test/test.log"
+)
 
 func runAsync(f func(*testing.T, *Network, []string), t *testing.T, n *Network, tchs []string, ch chan bool) {
 	f(t, n, tchs)
@@ -20,20 +29,19 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 	n.Ping()
 	//join two channels (shouldn't be too many)
 	if err := n.Join(tchs[len(tchs)-2:], []string{}); err != nil {
-		t.Fatalf("Join error: tried to join channels %#v, got error %s", tchs[len(tchs)-2:], err.String())
+		t.Errorf("Join error: tried to join channels %#v, got error %s", tchs[len(tchs)-2:], err.String())
 	}
 	n.Part(tchs[1:2], "Gone phishing")
-	n.Ping()
 	//join too many chans
 	if err := n.Join(tchs, []string{}); err == nil {
-		t.Fatalf("Join error: tried to join too many channels (%#v), didn't get any error", tchs)
+		t.Errorf("Join error: tried to join too many channels (%#v), didn't get any error", tchs)
 	}
 	n.Part(tchs, "Gone phishing")
-	n.Ping()
 	for i, _ := range tchs {
 		if err := n.Join(tchs[i:i+1], []string{}); err != nil {
-			t.Fatalf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
+			t.Errorf("Join error: tried to join channel %s, got error %s", tchs[i:i+1], err.String())
 		}
+		time.Sleep(second/2)
 		n.Part(tchs[i:i+1], "Gone phishing")
 		time.Sleep(second)
 	}
@@ -42,20 +50,20 @@ func joinTests(t *testing.T, n *Network, tchs []string) {
 
 func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 	if err := n.Join(tchs[len(tchs)-1:], []string{}); err != nil {
-		t.Fatalf("Join error: tried to join channel %s, got error %s", tchs[:1], err.String())
+		t.Errorf("Join error: tried to join channel %s, got error %s", tchs[:1], err.String())
 	}
 	donech := make(chan bool)
 	done := 0
 	//stress-test
 	numtests := 400
-	parallel := 10
+	parallel := 2
 	msgfmt := "Stress-testing %d"
 	nick, _ := n.Nick("")
 	msgparamfmt := fmt.Sprintf("%s %s", nick, msgfmt)
 	testfunc := func(dch chan bool, n *Network, tchs []string, i int) {
 		ch := make(chan *IrcMessage, parallel+10)
 		if err := n.Listen.RegListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i), ch); err != nil {
-			t.Fatalf("Register error: tried to register cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+			t.Errorf("Register error: tried to register cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 		}
 		go n.Privmsg([]string{nick}, fmt.Sprintf(msgfmt, i))
 		timeout := time.NewTicker(minute / 2)
@@ -65,17 +73,17 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 				if strings.Join(msg.Params, " ") == fmt.Sprintf(msgparamfmt, i) {
 					err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
 					if err != nil {
-						t.Fatalf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+						t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 					}
 					dch <- true
 					timeout.Stop()
 					return
 				}
 			case <-timeout.C:
-				t.Fatalf("Stress-test error: didn't receive sent message: %d", i)
+				t.Errorf("Stress-test error: didn't receive sent message: %d", i)
 				err := n.Listen.DelListener("PRIVMSG", fmt.Sprintf("testprivmsg%d", i))
 				if err != nil {
-					t.Fatalf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
+					t.Errorf("Register error: tried to unregister cmd %s, name: %s got error %s", "PRIVMSG", fmt.Sprintf("testprivmsg%d", i), err.String())
 				}
 				timeout.Stop()
 				dch <- true
@@ -104,71 +112,113 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 func privmsgTests(t *testing.T, n *Network, tchs []string) {
 	//test privmsg to too many recipients
 	if err := n.Privmsg(tchs, "testing ☺"); err == nil {
-		t.Fatalf("Privmsg error: tried to send message to too many nicks (%#v), didn't get an error", tchs)
+		t.Errorf("Privmsg error: tried to send message to too many nicks (%#v), didn't get an error", tchs)
 	}
 	//try privmsg to unjoined channel
 	if err := n.Privmsg(tchs[0:2], "testing ☺"); err == nil {
-		t.Fatalf("Privmsg error: tried to send message to unjoined channel (%#v), didn't get an error", tchs[0:2])
+		t.Errorf("Privmsg error: tried to send message to unjoined channel (%#v), didn't get an error", tchs[0:2])
 	}
 	//test single privmsgs
 	for _, ch := range tchs {
 		err := n.Privmsg([]string{ch}, "Testing☺")
 		if err != nil {
-			t.Fatalf("Privmsg error: tried to send message to %s, got error %s", ch, err.String())
+			t.Errorf("Privmsg error: tried to send message to %s, got error %s", ch, err.String())
 		}
 	}
 	return
 }
 
+func doIrcStuff(n *Network, t *testing.T, tchs []string, done chan bool) {
+	err := n.Connect()
+	net, _ := n.NetName("", "")
+	if err != nil {
+		t.Fatalf("Couldn't connect to network %s", net)
+		os.Exit(1)
+	}
+	jobs := 0
+	d := make(chan bool)
+	go runAsync(joinTests, t, n, tchs, d)
+	jobs++
+	n.Ping()
+	go runAsync(privmsgTests, t, n, tchs, d)
+	jobs++
+	go runAsync(privmsgStressTests, t, n, tchs, d)
+	jobs++
+	for jobs > 0 {
+		<-d
+		jobs--
+	}
+	
+	if err := n.Reconnect("Testing reconnect"); err != nil {
+		t.Fatalf("Reconnect error: tried to connect to %s, got error %s", net, err.String())
+	}
+	n.Disconnect("You're no fun anymore.")
+	if err := n.Reconnect("Testing reconnect"); err != nil {
+		t.Fatalf("Reconnect error: tried to connect to %s, got error %s", net, err.String())
+	}
+
+	go runAsync(joinTests, t, n, tchs, d)
+	jobs++
+	n.Ping()
+	go runAsync(privmsgTests, t, n, tchs, d)
+	jobs++
+	go runAsync(privmsgStressTests, t, n, tchs, d)
+	jobs++
+	for jobs > 0 {
+		<-d
+		jobs--
+	}
+	n.Disconnect("You're no fun anymore.")
+	done <-true
+}
+
 func TestIrc(t *testing.T) {
+	go func() {
+		srv := irc.NewServer("test/jaid/ircd.conf", "jaid-v0.0.1", "Today")
+		srv.Run()
+		t.Fatal("Test server shut down")
+		os.Exit(1)
+	}()
+	time.Sleep(minute/4) //wait for jaid to start up
 	rand.Seed(time.Nanoseconds())
+
 	testChans := func() []string {
 		ret := make([]string, maxchans)
 		retint := make([]int, maxchans)
 		for i := 0; i < maxchans; i++ {
 			for retint[i] == 0 {
-				retint[i] = rand.Intn(8) //on test server channels go from 1 to 7)
+				retint[i] = rand.Intn(400) //on test server channels go from 1 to 7)
 			}
 		}
 		for i := 0; i < maxchans; i++ {
 			ret[i] = fmt.Sprintf("#test%d", retint[i])
 		}
-		ret = append(ret, "#soul9")
 		return ret
-	}()
-	//	network := "irc.didntdoit.net:16697"
-	network := "irc.r0x0r.me:6667"
+	}
+
+	network := "localhost:16667"
+	sslnetwork := "localhost:16697"
 	nick := "ircchantest"
 	user := "nottelling"
 	realname := "I simply rock"
-	password := "justpassingby"
-	logfile := ""
-	n := NewNetwork(network, nick, user, realname, password, logfile)
-	if err := n.Connect(); err != nil {
-		t.Fatalf("Connect error: tried to connect to %s, got error %s", network, err.String())
-		return
-	}
-	done := make(chan bool)
+	password := "" //TODO: jaid+network pass
+	cls := make([]*Network, clients)
+	sslcls := make([]*Network, sslclients)
 	jobs := 0
-	n.Ping()
-	go runAsync(joinTests, t, n, testChans, done)
-	<-done
-	n.Ping()
-	go runAsync(privmsgTests, t, n, testChans, done)
-	<-done
-	n.Ping()
-	go runAsync(privmsgStressTests, t, n, testChans, done)
-	jobs++
+	done := make(chan bool)
+	for i:=0; i<clients; i++ {
+		cls[i] = NewNetwork(network, nick, user, realname, password, logfile)
+		go doIrcStuff(cls[i], t, testChans(), done)
+		jobs++
+	}
+	for i:=0; i<clients; i++ {
+		sslcls[i] = NewNetwork(sslnetwork, nick, user, realname, password, logfile)
+		go doIrcStuff(sslcls[i], t, testChans(), done)
+		jobs++
+	}
 	for jobs > 0 {
 		<-done
 		jobs--
 	}
-
-	if err := n.Reconnect("You're no fun anymore"); err != nil {
-		t.Fatalf("Reconnect error: tried to connect to %s, got error %s", network, err.String())
-		return
-	}
-
-	n.Disconnect("You're no fun anymore") //TODO err?
 }
 //TODO: test ctcp(?), ping, ..

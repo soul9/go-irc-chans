@@ -27,6 +27,7 @@ var (
 	tlsconfdir = confdir + "/tls"
 	certfile   = tlsconfdir + "/clientcert.pem"
 	keyfile    = tlsconfdir + "/clientkey.pem"
+	t = time.Tick(second)  //wake the ticker every second (buggy ticker!)
 )
 
 type Network struct {
@@ -38,7 +39,6 @@ type Network struct {
 	password          string
 	lag               int64
 	queueOut          chan string
-	queueIn           chan string
 	l                 *log.Logger
 	conn              net.Conn
 	Disconnected      bool
@@ -116,6 +116,9 @@ func CustomTlsConf() (*tls.Config, os.Error) {
 }
 
 func (n *Network) Connect() os.Error {
+	if !n.Disconnected {
+		return nil
+	}
 	var err os.Error
 	for _, ok := <-n.queueOut; ok; _, ok = <-n.queueOut { //empty the write channel so we don't send out-of-context messages
 		continue
@@ -146,20 +149,30 @@ func (n *Network) Connect() os.Error {
 			return os.NewError("Couldn't register with password")
 		}
 	}
-	_, err = n.Nick(n.nick)
-	i := 0
-	for err != nil {
-		n.nick = fmt.Sprintf("_%s", n.nick)
+	nret := make(chan bool)
+	go func(n *Network, ret chan bool){
 		_, err = n.Nick(n.nick)
-		if i > 5 {
-			return os.NewError("Failed to acquire any alternate nick")
+		i := 0
+		for err != nil {
+			if i > 8 {
+				ret <-false
+				return
+			}
+			n.nick = fmt.Sprintf("_%s", n.nick)
+			_, err = n.Nick(n.nick)
+			i++
 		}
-		i++
-	}
+		ret <-true
+		return
+	}(n, nret)
 	n.user, err = n.User(n.user)
 	if err != nil {
 		n.Disconnect("Couldn't register user")
-		return os.NewError("Unable to register usename")
+		return os.NewError("Unable to register username")
+	}
+	if ok := <-nret; !ok {
+		n.Disconnect("Failed to acquire any alternate nick")
+		return os.NewError("Failed to acquire any alternate nick")
 	}
 	time.Sleep(second) //sleep a second so the lag is more realistic
 	n.Ping()
@@ -179,10 +192,11 @@ func (n *Network) Reconnect(reason string) os.Error {
 func (n *Network) Disconnect(reason string) {
 	if n.conn != nil {
 		n.Quit(reason)
-		time.Sleep(minute / 60) //sleep 1 second to send QUIT message
+		time.Sleep(second) //sleep 1 second to send QUIT message
 		n.conn.Close()
 	}
 	n.Disconnected = true
+	n.lag = second
 	return
 }
 
@@ -200,27 +214,26 @@ func (n *Network) sender() {
 				n.l.Printf("Error writing to socket (%s): %s", err.String(), msg)
 				continue
 			}
+			err = n.buf.Flush()
+			if err != nil {
+				n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
+				continue
+			}
+			//dispatch
+			go func(msg IrcMessage) {
+				n.OutListen.lock.RLock()
+				for _, ch := range n.OutListen.chans[msg.Cmd] {
+					_ = ch <- &msg
+				}
+				for _, ch := range n.OutListen.chans["*"] {
+					_ = ch <- &msg
+				}
+				n.OutListen.lock.RUnlock()
+				return
+			}(m)
 		} else {
 			n.l.Println("Couldn't send malformed message: ", msg)
-			continue
 		}
-		err = n.buf.Flush()
-		if err != nil {
-			n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
-			continue
-		}
-		//dispatch
-		go func(msg IrcMessage) {
-			n.OutListen.lock.RLock()
-			for _, ch := range n.OutListen.chans[msg.Cmd] {
-				_ = ch <- &msg
-			}
-			for _, ch := range n.OutListen.chans["*"] {
-				_ = ch <- &msg
-			}
-			n.OutListen.lock.RUnlock()
-			return
-		}(m)
 	}
 	return
 }
@@ -228,8 +241,8 @@ func (n *Network) sender() {
 func (n *Network) receiver() {
 	for {
 		if n.buf == nil {
-			time.Sleep(minute / 4) //try again in 15 seconds
-			continue
+			n.Disconnect("Connection error")
+			return
 		}
 		l, err := n.buf.ReadString('\n')
 		if err != nil {
@@ -241,6 +254,7 @@ func (n *Network) receiver() {
 		err, msg := PackMsg(l)
 		if err != nil {
 			n.l.Printf("Couldn't unpack message: %s: %s", err.String(), l)
+			continue
 		}
 		//dispatch
 		go func(msg IrcMessage) {
@@ -273,12 +287,11 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 	n.Listen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
 	n.OutListen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
 	n.queueOut = make(chan string, 100)
-	n.queueIn = make(chan string, 100)
 	n.ticker1 = time.Tick(minute)       //Tick every minute.
 	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
 	n.conn = nil
 	n.buf = nil
-	n.lag = timeout(second / 15) // initial lag of 0.5 second for all irc commands
+	n.lag = second // initial lag of 1 second for all irc commands (a lot)
 	n.Disconnected = true
 	logflags := log.Ldate | log.Lmicroseconds | log.Llongfile
 	logprefix := fmt.Sprintf("%s ", n.network)
