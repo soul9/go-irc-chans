@@ -27,7 +27,7 @@ var (
 	tlsconfdir = confdir + "/tls"
 	certfile   = tlsconfdir + "/clientcert.pem"
 	keyfile    = tlsconfdir + "/clientkey.pem"
-	t          = time.Tick(second) //wake the ticker every second (buggy ticker!)
+	t          = time.Tick(second) //wake the ticker every second (buggy ticker! http://code.google.com/p/go/issues/detail?id=1379 )
 )
 
 type Network struct {
