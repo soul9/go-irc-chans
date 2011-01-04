@@ -136,13 +136,18 @@ func timeout(lag int64) int64 {
 
 func (n *Network) Register() os.Error {
 	var err os.Error
+	welcome := make(chan *IrcMessage, 1)
+	if err = n.Listen.RegListener("001", "register", welcome); err != nil {
+		return os.NewError("Couldn't register listener for welcome messages (001)")
+	}
+	defer n.Listen.DelListener("001", "register")
 	if n.password != "" {
 		err = n.Pass()
 		if err != nil {
 			return os.NewError("Couldn't register with password")
 		}
 	}
-	nret := make(chan bool)
+	nret := make(chan bool, 1)
 	go func(n *Network, ret chan bool) {
 		_, err = n.Nick(n.nick)
 		i := 0
@@ -163,8 +168,13 @@ func (n *Network) Register() os.Error {
 	if err != nil {
 		return os.NewError("Unable to register username")
 	}
-	if ok := <-nret; !ok {
-		return os.NewError("Failed to acquire any alternate nick")
+	select {
+	case ok := <-nret:
+		if !ok {
+			return os.NewError("Failed to acquire any alternate nick")
+		}
+	case <-welcome:
+		return nil
 	}
 	return nil
 }
