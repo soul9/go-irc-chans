@@ -71,3 +71,26 @@ func (m *IrcMessage) String() string {
 	}
 	return msg.String()
 }
+
+func (m *IrcMessage) Origin() map[string]string {
+	ret := make(map[string]string)
+	if m.Prefix != "" {
+		tmp := strings.Split(m.Prefix, "!", 2)
+		ret["nick"] = tmp[0]
+		tmp = strings.Split(tmp[1], "@", 2)
+		ret["user"] = tmp[0]
+		ret["host"] = tmp[1]
+	} else {
+		if m.Cmd == "PRIVMSG" {
+			ret["chan"] = m.Params[0]
+		}
+	}
+	return ret
+}
+
+func (m *IrcMessage) Destination() string {
+	if m.Cmd == "PRIVMSG" {
+		return m.Params[0]
+	}
+	return ""
+}
