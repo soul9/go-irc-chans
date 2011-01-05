@@ -584,18 +584,18 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 		"RPL_WHOISOPERATOR", "RPL_WHOISIDLE",
 		"ERR_NOSUCHNICK", "RPL_ENDOFWHOIS"}
 	repch := make(chan *IrcMessage, 10)
-	for _, rep := range myreplies {
-		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
-			n.l.Printf("Couldn't whois %d=%s: %s", replies[rep], rep, err.String())
-			os.Exit(1)
-		}
-	}
 	defer func(myreplies []string, t string) {
 		for _, rep := range myreplies {
 			n.Listen.DelListener(replies[rep], t)
 		}
 		return
 	}(myreplies, t)
+	for _, rep := range myreplies {
+		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
+			ticker.Stop()
+			return os.NewError(fmt.Sprintf("Couldn't whois %d=%s: %s", replies[rep], rep, err.String()))
+		}
+	}
 
 	if server == "" {
 		n.queueOut <- fmt.Sprintf("WHOIS %s", strings.Join(target, ","))
@@ -611,6 +611,7 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 		case m := <-repch:
 			info[m.Cmd] = append(info[m.Cmd], strings.Join((*m).Params, " "))
 			if m.Cmd == replies["RPL_ENDOFWHOIS"] {
+				ticker.Stop()
 				return info
 			}
 			ticker.Stop()
