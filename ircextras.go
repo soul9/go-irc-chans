@@ -575,8 +575,9 @@ func (n *Network) Who(target string) {
 	return
 }
 
-func (n *Network) Whois(target []string, server string) map[string][]string { //TODO: return a map[string][][]string? map[string][]IrcMessage?
+func (n *Network) Whois(target []string, server string) (map[string][]string, os.Error) { //TODO: return a map[string][][]string? map[string][]IrcMessage?
 	t := strconv.Itoa64(time.Nanoseconds())
+	ret := make(map[string][]string)
 	ticker := time.NewTicker(timeout(n.lag))
 	myreplies := []string{"ERR_NOSUCHSERVER", "ERR_NONICKNAMEGIVEN",
 		"RPL_WHOISUSER", "RPL_WHOISCHANNELS",
@@ -593,7 +594,7 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 	for _, rep := range myreplies {
 		if err := n.Listen.RegListener(replies[rep], t, repch); err != nil {
 			ticker.Stop()
-			return os.NewError(fmt.Sprintf("Couldn't whois %d=%s: %s", replies[rep], rep, err.String()))
+			return ret, os.NewError(fmt.Sprintf("Couldn't whois %s=%s: %s", replies[rep], rep, err.String()))
 		}
 	}
 
@@ -602,27 +603,26 @@ func (n *Network) Whois(target []string, server string) map[string][]string { //
 	} else {
 		n.queueOut <- fmt.Sprintf("WHOIS %s %s", server, strings.Join(target, ","))
 	}
-	info := make(map[string][]string)
 	for _, rep := range myreplies {
-		info[replies[rep]] = make([]string, 0)
+		ret[replies[rep]] = make([]string, 0)
 	}
 	for {
 		select {
 		case m := <-repch:
-			info[m.Cmd] = append(info[m.Cmd], strings.Join((*m).Params, " "))
+			ret[m.Cmd] = append(ret[m.Cmd], strings.Join((*m).Params, " "))
 			if m.Cmd == replies["RPL_ENDOFWHOIS"] {
 				ticker.Stop()
-				return info
+				return ret, nil
 			}
 			ticker.Stop()
 			ticker = time.NewTicker(timeout(n.lag)) //restart the ticker to timeout correctly
 		case <-ticker.C:
 			ticker.Stop()
-			return info
+			return ret, nil
 		}
 	}
 	ticker.Stop()
-	return info //BUG: why do we need this?
+	return ret, nil //BUG: why do we need this?
 }
 
 func (n *Network) Whowas(target string, count int, server string) {
