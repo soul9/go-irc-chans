@@ -127,9 +127,9 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	t := lag * 3
-	if t > second*5 {
-		return second * 5
+	t := lag * 10
+	if t > second*15 {
+		return second * 15
 	}
 	return t
 }
