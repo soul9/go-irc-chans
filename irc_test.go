@@ -14,8 +14,8 @@ import "bitbucket.org/kylelemons/jaid/src/pkg/irc"
 
 const (
 	maxchans   = 10
-	clients    = 4
-	sslclients = 4
+	clients    = 100
+	sslclients = 20
 	logfile    = "test/test.log"
 )
 
@@ -58,7 +58,7 @@ func privmsgStressTests(t *testing.T, n *Network, tchs []string) {
 	numtests := 400
 	parallel := 2
 	msgfmt := "Stress-testing %d"
-	nick, _ := n.Nick("")
+	nick := n.GetNick()
 	msgparamfmt := fmt.Sprintf("%s %s", nick, msgfmt)
 	testfunc := func(dch chan bool, n *Network, tchs []string, i int) {
 		ch := make(chan *IrcMessage, parallel+10)
@@ -198,7 +198,7 @@ func TestIrc(t *testing.T) {
 
 	network := "localhost:16667"
 	sslnetwork := "localhost:16697"
-	nick := "ircchantest"
+	nick := "test"
 	user := "nottelling"
 	realname := "I simply rock"
 	password := "" //TODO: jaid+network pass
@@ -207,12 +207,38 @@ func TestIrc(t *testing.T) {
 	jobs := 0
 	done := make(chan bool)
 	for i := 0; i < clients; i++ {
-		cls[i] = NewNetwork(network, nick, user, realname, password, logfile)
+		cls[i] = NewNetwork(network, fmt.Sprintf("%s%d", nick, i), user, realname, password, logfile)
+		go func(i int) {
+			err := cls[i].Connect()
+			if err != nil {
+				t.Fatalf("Error connecting: %s: %s", cls[i].GetNick(), err.String())
+			}
+			done <-true
+		}(i)
+		jobs++
+	}
+	for i := 0; i < sslclients; i++ {
+		sslcls[i] = NewNetwork(sslnetwork, fmt.Sprintf("%s%d", nick, i), user, realname, password, logfile)
+		sslcls[i].Connect()
+		go func(i int) {
+			err := sslcls[i].Connect()
+			if err != nil {
+				t.Fatalf("Error connecting: %s: %s", sslcls[i].GetNick(), err.String())
+			}
+			done <-true
+		}(i)
+		jobs++
+	}
+	for jobs > 0 {
+		<-done
+		jobs--
+	}
+
+	for i := 0; i < clients; i++ {
 		go doIrcStuff(cls[i], t, testChans(), done)
 		jobs++
 	}
-	for i := 0; i < clients; i++ {
-		sslcls[i] = NewNetwork(sslnetwork, nick, user, realname, password, logfile)
+	for i := 0; i < sslclients; i++ {
 		go doIrcStuff(sslcls[i], t, testChans(), done)
 		jobs++
 	}
