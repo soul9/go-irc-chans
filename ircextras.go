@@ -313,12 +313,18 @@ func (n *Network) Realname(newrn string) string {
 	return n.realname
 }
 
+func (n *Network) GetNetName() string {
+	return n.network
+}
+
 func (n *Network) NetName(newname string, reason string) (string, os.Error) {
 	if newname != "" {
 		n.network = newname
 		return n.network, n.Reconnect(reason)
+	} else {
+		return n.network, os.NewError("Empty name")
 	}
-	return n.network, nil
+	return n.network, nil //BUG: why do we need this?
 }
 
 func (n *Network) SysOpMe(user, pass string) {
