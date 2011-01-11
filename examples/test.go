@@ -42,7 +42,7 @@ func main() {
 		for !closed(chin) {
 			msg := <-chin
 			nick := n.GetNick()
-			if err == nil && msg.Params[0] == nick && msg.Params[1] == "memusage" {
+			if msg.Params[0] == nick && msg.Params[1] == "memusage" {
 				targ := strings.Split(msg.Prefix, "!", 2)
 				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Currently allocated: %.2fMb, taken from system: %.2fMb", float(runtime.MemStats.Alloc)/1024/1024, float(runtime.MemStats.Sys)/1024/1024))
 				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Currently allocated (heap): %.2fMb, taken from system (heap): %.2fMb", float(runtime.MemStats.HeapAlloc)/1024/1024, float(runtime.MemStats.HeapSys)/1024/1024))
