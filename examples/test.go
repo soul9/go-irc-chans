@@ -41,13 +41,13 @@ func main() {
 		n.Listen.RegListener("PRIVMSG", "testreply", chin)
 		for !closed(chin) {
 			msg := <-chin
-			nick, err := n.Nick("")
+			nick := n.GetNick()
 			if err == nil && msg.Params[0] == nick && msg.Params[1] == "memusage" {
 				targ := strings.Split(msg.Prefix, "!", 2)
 				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Currently allocated: %.2fMb, taken from system: %.2fMb", float(runtime.MemStats.Alloc)/1024/1024, float(runtime.MemStats.Sys)/1024/1024))
 				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Currently allocated (heap): %.2fMb, taken from system (heap): %.2fMb", float(runtime.MemStats.HeapAlloc)/1024/1024, float(runtime.MemStats.HeapSys)/1024/1024))
 				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Goroutines currently running: %d", runtime.Goroutines()))
-				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Next garbage collection will be in %.1f second(s).", float(runtime.MemStats.NextGC)/1000/1000/1000))
+				go n.Privmsg([]string{targ[0]}, fmt.Sprintf("Next garbage collection will be when heap reaches %.1f Mb.", float(runtime.MemStats.NextGC)/1024/1024))
 			}
 		}
 		n.Listen.DelListener("PRIVMSG", "testreply")

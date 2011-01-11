@@ -127,9 +127,9 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	t := lag * 10
-	if t > second*15 {
-		return second * 15
+	t := lag * 3
+	if t > second*5 {
+		return second * 5
 	}
 	return t
 }
@@ -210,13 +210,18 @@ func (n *Network) Pass() os.Error {
 	return err
 }
 
+
+func (n *Network) GetNick() string {
+	return n.nick
+}
+
 func (n *Network) Nick(newnick string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
 	ticker := time.NewTicker(timeout(n.lag))
 	defer ticker.Stop()
 	myreplies := []string{"ERR_NONICKNAMEGIVEN", "ERR_ERRONEUSNICKNAME", "ERR_NICKNAMEINUSE", "ERR_NICKCOLLISION"}
 	if newnick == "" {
-		return n.nick, nil
+		return n.nick, os.NewError("Empty nicknames are not accepted in IRC")
 	}
 	//TODO: check for correct nick (illegal characters)
 	if len(newnick) > 9 {
@@ -255,6 +260,9 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 	return n.nick, nil
 }
 
+func (n *Network) GetUser(newuser string) string {
+	return n.user
+}
 
 func (n *Network) User(newuser string) (string, os.Error) {
 	t := strconv.Itoa64(time.Nanoseconds())
@@ -262,7 +270,7 @@ func (n *Network) User(newuser string) (string, os.Error) {
 	defer ticker.Stop()
 	myreplies := []string{"ERR_NEEDMOREPARAMS", "ERR_ALREADYREGISTRED", "RPL_ENDOFMOTD", "ERR_NOTREGISTERED"}
 	if newuser == "" {
-		return n.user, nil
+		return n.user, os.NewError("Can't have an empty user field")
 	} else if len(newuser) > 9 {
 		newuser = newuser[:9]
 	}
