@@ -621,7 +621,7 @@ func (n *Network) Whois(target []string, server string) (map[string][]string, os
 		ret[replies[rep]] = make([]string, 0)
 	}
 	done := 0
-	err := os.NewError("")
+	err := os.Error(nil)
 	for {
 		select {
 		case m := <-repch:
