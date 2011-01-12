@@ -213,7 +213,7 @@ func TestIrc(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error connecting: %s: %s", cls[i].GetNick(), err.String())
 			}
-			done <- true
+			done <-true
 		}(i)
 		jobs++
 	}
@@ -225,7 +225,7 @@ func TestIrc(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error connecting: %s: %s", sslcls[i].GetNick(), err.String())
 			}
-			done <- true
+			done <-true
 		}(i)
 		jobs++
 	}
