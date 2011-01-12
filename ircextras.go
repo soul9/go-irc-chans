@@ -632,7 +632,11 @@ func (n *Network) Whois(target []string, server string) (map[string][]string, os
 			} else if m.Cmd == replies["ERR_NOSUCHNICK"] {
 				for _, targ := range target {
 					if m.Params[1] == targ {
-						err = os.NewError(fmt.Sprintf("%s, No such nick: %s", err.String(), targ))
+						if err == nil {
+							err = os.NewError(fmt.Sprintf("No such nick: %s", targ))
+						} else {
+							err = os.NewError(fmt.Sprintf("%s, No such nick: %s", err.String(), targ))
+						}
 						done++
 					}
 				}
