@@ -58,13 +58,21 @@ func (m *IrcMessage) String() string {
 		msg.WriteString(fmt.Sprintf(":%s ", m.Prefix))
 	}
 	msg.WriteString(fmt.Sprintf("%s", m.Cmd))
+	params := bytes.NewBufferString("")
+	space := false
 	for i, p := range m.Params {
 		if idx := strings.Index(p, " "); idx < 0 {
 			msg.WriteString(fmt.Sprintf(" %s", p))
 		} else {
+			space = true
 			msg.WriteString(fmt.Sprintf(" :%s", strings.Join(m.Params[i:], " ")))
 			break
 		}
+	}
+	if space {
+		msg.WriteString(params.String())
+	} else {
+		msg.WriteString(fmt.Sprintf(":%s", params.String()))
 	}
 	if msg.Len() > 510 {
 		return ""
