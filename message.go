@@ -14,7 +14,7 @@ type IrcMessage struct {
 }
 
 
-func PackMsg(msg string) (os.Error, IrcMessage) { //TODO: this needs work?
+func PackMsg(msg string) (IrcMessage, os.Error) { //TODO: this needs work?
 	var ret IrcMessage
 	err := "Errors encountered during message packing: "
 	if strings.HasPrefix(msg, ":") {
@@ -41,9 +41,9 @@ func PackMsg(msg string) (os.Error, IrcMessage) { //TODO: this needs work?
 		}
 	}
 	if err != "Errors encountered during message packing: " {
-		return os.NewError(err), ret
+		return ret, os.NewError(err)
 	}
-	return nil, ret
+	return ret, nil
 }
 
 func (m *IrcMessage) String() string {

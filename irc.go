@@ -169,7 +169,7 @@ func (n *Network) Disconnect(reason string) {
 func (n *Network) sender() {
 	for {
 		msg := <-n.queueOut
-		err, m := PackMsg(msg)
+		m, err := PackMsg(msg)
 		if err == nil {
 			if n.conn == nil || n.buf == nil {
 				n.l.Printf("Error writing message (%s): No connection", msg)
@@ -206,7 +206,7 @@ func (n *Network) receiver() {
 			return
 		}
 		l = strings.TrimRight(l, "\r\n")
-		err, msg := PackMsg(l)
+		msg, err := PackMsg(l)
 		if err != nil {
 			n.l.Printf("Couldn't unpack message: %s: %s", err.String(), l)
 			continue
