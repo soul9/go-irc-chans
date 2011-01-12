@@ -158,7 +158,7 @@ func (n *Network) Reconnect(reason string) os.Error {
 func (n *Network) Disconnect(reason string) {
 	if n.conn != nil {
 		n.Quit(reason)
-		time.Sleep(timeout(n.lag))
+		time.Sleep(timeout(n.lag)*2)
 		n.conn.Close()
 	}
 	n.Disconnected = true
