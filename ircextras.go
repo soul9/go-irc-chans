@@ -753,3 +753,7 @@ func (n *Network) Ison(users []string) {
 	//RPL_ISON                ERR_NEEDMOREPARAMS
 	return
 }
+
+func (n *Network) SendRaw(msg string) {
+	n.queueOut <- msg
+}
