@@ -157,8 +157,17 @@ func (n *Network) Reconnect(reason string) os.Error {
 
 func (n *Network) Disconnect(reason string) {
 	if n.conn != nil {
+		rech := make(chan *IrcMessage)
+		timeout := time.NewTicker(timeout(n.lag) * 10) //Big timeout
+		name := "go-ircfs" + string(time.Seconds())
+		n.Listen.RegListener("ERROR", name, rech)
 		n.Quit(reason)
-		time.Sleep(timeout(n.lag)*2)
+		select {
+		case <-rech:
+		case <-timeout.C:
+		}
+		n.Listen.DelListener("ERROR", name)
+		timeout.Stop()
 		n.conn.Close()
 	}
 	n.Disconnected = true
