@@ -620,23 +620,35 @@ func (n *Network) Whois(target []string, server string) (map[string][]string, os
 	for _, rep := range myreplies {
 		ret[replies[rep]] = make([]string, 0)
 	}
+	done := 0
+	err := os.NewError("")
 	for {
 		select {
 		case m := <-repch:
 			ret[m.Cmd] = append(ret[m.Cmd], strings.Join((*m).Params, " "))
 			if m.Cmd == replies["RPL_ENDOFWHOIS"] {
 				ticker.Stop()
-				return ret, nil
+				return ret, err
+			} else if m.Cmd == replies["ERR_NOSUCHNICK"] {
+				for _, targ := range target {
+					if m.Params[1] == targ {
+						err = os.NewError(fmt.Sprintf("%s, No such nick: %s", err.String(), targ))
+						done++
+					}
+				}
+				if done == len(target) {
+					return ret, err
+				}
 			}
 			ticker.Stop()
 			ticker = time.NewTicker(timeout(n.lag)) //restart the ticker to timeout correctly
 		case <-ticker.C:
 			ticker.Stop()
-			return ret, nil
+			return ret, err
 		}
 	}
 	ticker.Stop()
-	return ret, nil //BUG: why do we need this?
+	return ret, err //BUG: why do we need this?
 }
 
 func (n *Network) Whowas(target string, count int, server string) {
