@@ -3,8 +3,7 @@ package main
 import (
 	"flag"
 	"os"
-	//	"github.com/soul9/go-irc-chans" //ircchans
-	"ircchans"
+	"github.com/soul9/go-irc-chans" //ircchans
 	"log"
 	"time"
 	"fmt"
