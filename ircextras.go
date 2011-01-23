@@ -127,7 +127,7 @@ var replies = map[string]string{
 	"RPL_ADMINEMAIL":       "259"}
 
 func timeout(lag int64) int64 {
-	t := lag * 10
+	t := lag * 3
 	if t > second*15 {
 		return second * 15
 	}
@@ -197,7 +197,7 @@ func (n *Network) Pass() os.Error {
 		tick.Stop()
 		return
 	}(myreplies, t, ticker)
-	n.queueOut <- fmt.Sprintf("PASS %s", n.password)
+	n.queueOut <- &IrcMessage{"", "PASS", []string{n.password}}
 	select {
 	case msg := <-repch:
 		if msg.Cmd == replies["ERR_NEEDMOREPARAMS"] {
@@ -242,7 +242,7 @@ func (n *Network) Nick(newnick string) (string, os.Error) {
 			return n.nick, os.NewError("Unable to register new listener")
 		}
 	}
-	n.queueOut <- fmt.Sprintf("NICK %s", newnick)
+	n.queueOut <- &IrcMessage{"", "NICK", []string{newnick}}
 	select {
 	case msg := <-repch:
 		if msg.Cmd == replies["ERR_ERRONEUSNICKNAME"] || msg.Cmd == replies["ERR_NICKNAMEINUSE"] || msg.Cmd == replies["ERR_NICKCOLLISION"] {
@@ -286,7 +286,7 @@ func (n *Network) User(newuser string) (string, os.Error) {
 			return "", os.NewError(fmt.Sprintf("Couldn't register Listener for %s: %s", replies[rep], err.String()))
 		}
 	}
-	n.queueOut <- fmt.Sprintf("USER %s 0.0.0.0 0.0.0.0 :%s", n.user, n.realname)
+	n.queueOut <- &IrcMessage{"", "USER", []string{n.user, "0.0.0.0", "0.0.0.0", n.realname}}
 	select {
 	case msg := <-repch:
 		if msg.Cmd == replies["ERR_NEEDMOREPARAMS"] {
@@ -328,7 +328,7 @@ func (n *Network) NetName(newname string, reason string) (string, os.Error) {
 }
 
 func (n *Network) SysOpMe(user, pass string) {
-	n.queueOut <- fmt.Sprintf("OPER %s %s", user, pass)
+	n.queueOut <- &IrcMessage{"", "OPER", []string{user, pass}}
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              RPL_YOUREOPER
 	//ERR_NOOPERHOST                  ERR_PASSWDMISMATCH
@@ -336,7 +336,7 @@ func (n *Network) SysOpMe(user, pass string) {
 }
 
 func (n *Network) Quit(reason string) {
-	n.queueOut <- fmt.Sprintf("QUIT :%s", reason)
+	n.queueOut <- &IrcMessage{"", "QUIT", []string{reason}}
 	return
 }
 
@@ -383,7 +383,7 @@ func (n *Network) Join(chans []string, keys []string) os.Error { //return: topic
 			}
 		}
 	}
-	n.queueOut <- fmt.Sprintf("JOIN %s %s", strings.Join(chans, ","), strings.Join(keys, ","))
+	n.queueOut <- &IrcMessage{"", "JOIN", []string{strings.Join(chans, ","), strings.Join(keys, ",")}}
 	joined := 0
 	for {
 		select {
@@ -421,7 +421,7 @@ func (n *Network) Join(chans []string, keys []string) os.Error { //return: topic
 }
 
 func (n *Network) Part(chans []string, reason string) {
-	n.queueOut <- fmt.Sprintf("PART %s :%s", strings.Join(chans, ","), reason)
+	n.queueOut <- &IrcMessage{"", "PART", []string{strings.Join(chans, ","), reason}}
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              ERR_NOSUCHCHANNEL
 	//ERR_NOTONCHANNEL
@@ -459,7 +459,7 @@ func (n *Network) Mode(target, mode, params string) {
 			}
 		}
 	}
-	n.queueOut <- fmt.Sprintf("MODE %s %s %s", target, mode, params)
+	n.queueOut <- &IrcMessage{"", "MODE", []string{target, mode, params}}
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              RPL_CHANNELMODEIS
 	//ERR_CHANOPRIVSNEEDED            ERR_NOSUCHNICK
@@ -472,12 +472,8 @@ func (n *Network) Mode(target, mode, params string) {
 	return
 }
 
-func (n *Network) Topic(ch, topic string) {
-	if topic == "" {
-		n.queueOut <- fmt.Sprintf("TOPIC %s", ch)
-	} else {
-		n.queueOut <- fmt.Sprintf("TOPIC %s :%s", ch, topic)
-	}
+func (n *Network) SetTopic(ch, topic string) {
+	n.queueOut <- &IrcMessage{"", "TOPIC", []string{ch, topic}}
 	//TODO: replies
 	//ERR_NEEDMOREPARAMS              ERR_NOTONCHANNEL
 	//RPL_NOTOPIC                     RPL_TOPIC
@@ -485,22 +481,31 @@ func (n *Network) Topic(ch, topic string) {
 	return
 }
 
+func (n *Network) GetTopic(ch string) string {
+	n.queueOut <- &IrcMessage{"", "TOPIC", []string{ch}}
+	//TODO: replies
+	//ERR_NEEDMOREPARAMS              ERR_NOTONCHANNEL
+	//RPL_NOTOPIC                     RPL_TOPIC
+	//ERR_CHANOPRIVSNEEDED
+	return ""
+}
+
 func (n *Network) Names(chans []string) {
-	n.queueOut <- fmt.Sprintf("NAMES %s", strings.Join(chans, ","))
+	n.queueOut <- &IrcMessage{"", "NAMES", []string{strings.Join(chans, ",")}}
 	//TODO: replies:
 	//RPL_NAMREPLY                    RPL_ENDOFNAMES
 	return
 }
 
 func (n *Network) List(chans []string, server string) {
-	raw := "LIST"
+	msg := &IrcMessage{"", "LIST", []string{}}
 	if len(chans) > 0 {
-		raw += fmt.Sprintf(" %s", strings.Join(chans, ","))
+		msg.Params = append(msg.Params, strings.Join(chans, ","))
 	}
 	if server != "" {
-		raw += fmt.Sprintf(" %s", server)
+		msg.Params = append(msg.Params, server)
 	}
-	n.queueOut <- raw
+	n.queueOut <- msg
 	//TODO: replies:
 	//ERR_NOSUCHSERVER                RPL_LISTSTART
 	//RPL_LIST                        RPL_LISTEND
@@ -508,7 +513,7 @@ func (n *Network) List(chans []string, server string) {
 }
 
 func (n *Network) Invite(target, ch string) {
-	n.queueOut <- fmt.Sprintf("INVITE %s %s", target, ch)
+	n.queueOut <- &IrcMessage{"", "INVITE", []string{target, ch}}
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              ERR_NOSUCHNICK
 	//ERR_NOTONCHANNEL                ERR_USERONCHANNEL
@@ -518,11 +523,7 @@ func (n *Network) Invite(target, ch string) {
 }
 
 func (n *Network) Kick(ch, target, reason string) {
-	if reason == "" {
-		n.queueOut <- fmt.Sprintf("KICK %s %s", ch, target)
-	} else {
-		n.queueOut <- fmt.Sprintf("KICK %s %s :%s", ch, target, reason)
-	}
+	n.queueOut <- &IrcMessage{"", "KICK", []string{ch, target, reason}}
 	//TODO: replies:
 	//ERR_NEEDMOREPARAMS              ERR_NOSUCHCHANNEL
 	//ERR_BADCHANMASK                 ERR_CHANOPRIVSNEEDED
@@ -549,7 +550,7 @@ func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make pr
 		}
 		return
 	}(myreplies, t)
-	n.queueOut <- fmt.Sprintf("PRIVMSG %s :%s", strings.Join(target, ","), msg)
+	n.queueOut <- &IrcMessage{"", "PRIVMSG", []string{strings.Join(target, ","), msg}}
 	for {
 		select {
 		case msg := <-repch:
@@ -571,7 +572,7 @@ func (n *Network) Privmsg(target []string, msg string) os.Error { //BUG: make pr
 }
 
 func (n *Network) Notice(target, text string) { //BUG: make notice hack up messages that are too long
-	n.queueOut <- fmt.Sprintf("NOTICE %s :%s", target, text)
+	n.queueOut <- &IrcMessage{"", "NOTICE", []string{target, text}}
 	//TODO: replies:
 	//ERR_NORECIPIENT                 ERR_NOTEXTTOSEND
 	//ERR_CANNOTSENDTOCHAN            ERR_NOTOPLEVEL
@@ -582,7 +583,7 @@ func (n *Network) Notice(target, text string) { //BUG: make notice hack up messa
 }
 
 func (n *Network) Who(target string) {
-	n.queueOut <- fmt.Sprintf("WHO %s", target)
+	n.queueOut <- &IrcMessage{"", "WHO", []string{target}}
 	//TODO: replies:
 	//ERR_NOSUCHSERVER
 	//RPL_WHOREPLY                    RPL_ENDOFWHO
@@ -613,9 +614,9 @@ func (n *Network) Whois(target []string, server string) (map[string][]string, os
 	}
 
 	if server == "" {
-		n.queueOut <- fmt.Sprintf("WHOIS %s", strings.Join(target, ","))
+		n.queueOut <- &IrcMessage{"", "WHOIS", []string{strings.Join(target, ",")}}
 	} else {
-		n.queueOut <- fmt.Sprintf("WHOIS %s %s", server, strings.Join(target, ","))
+		n.queueOut <- &IrcMessage{"", "WHOIS", []string{server, strings.Join(target, ",")}}
 	}
 	for _, rep := range myreplies {
 		ret[replies[rep]] = make([]string, 0)
@@ -656,12 +657,15 @@ func (n *Network) Whois(target []string, server string) (map[string][]string, os
 }
 
 func (n *Network) Whowas(target string, count int, server string) {
-	var raw string
-	if server != "" {
-		raw = fmt.Sprintf("WHOIS %s ", server, target)
+	msg := &IrcMessage{"", "WHOIS", []string{}}
+	msg.Params = append(msg.Params, target)
+	if count != 0 {
+		msg.Params = append(msg.Params, strconv.Itoa(count))
 	}
-	raw += fmt.Sprintf("%s %s", target, strconv.Itoa(count))
-	n.queueOut <- raw
+	if server != "" {
+		msg.Params = append(msg.Params, server)
+	}
+	n.queueOut <- msg
 	//TODO: replies:
 	//ERR_NONICKNAMEGIVEN             ERR_WASNOSUCHNICK
 	//RPL_WHOWASUSER                  RPL_WHOISSERVER
@@ -670,7 +674,7 @@ func (n *Network) Whowas(target string, count int, server string) {
 }
 
 func (n *Network) PingNick(nick string) {
-	n.queueOut <- fmt.Sprintf("PING %s", nick)
+	n.queueOut <- &IrcMessage{"", "PING", []string{nick}}
 	//TODO: replies:
 	//ERR_NOORIGIN                    ERR_NOSUCHSERVER
 	return
@@ -694,7 +698,7 @@ func (n *Network) Ping() (int64, os.Error) {
 	}
 	n.Listen.RegListener("PONG", t, repch)
 	var rep *IrcMessage
-	n.queueOut <- fmt.Sprintf("PING %d", time.Nanoseconds())
+	n.queueOut <- &IrcMessage{"", "PING", []string{strconv.Itoa64(time.Nanoseconds())}}
 	select {
 	case <-ticker.C:
 		return 0, os.NewError("Timeout in receiving reply")
@@ -722,30 +726,28 @@ func (n *Network) Ping() (int64, os.Error) {
 }
 
 func (n *Network) Pong(msg string) {
-	n.queueOut <- fmt.Sprintf("PONG %s", msg)
+	n.queueOut <- &IrcMessage{"", "PONG", []string{msg}}
 	//TODO: numeric replies? PingNick?
 	return
 }
 
 func (n *Network) Away(reason string) {
-	raw := fmt.Sprintf("AWAY")
+	msg := &IrcMessage{"", "AWAY", []string{}}
 	if reason != "" {
-		raw += fmt.Sprintf(" :%s", reason)
+		msg.Params = append(msg.Params, reason)
 	}
-	raw += ""
-	n.queueOut <- raw
+	n.queueOut <- msg
 	//TODO: replies:
 	//RPL_UNAWAY                      RPL_NOWAWAY
 	return
 }
 
 func (n *Network) Users(server string) {
-	raw := fmt.Sprintf("USERS")
+	msg := &IrcMessage{"", "USERS", []string{}}
 	if server != "" {
-		raw += fmt.Sprintf(" %s", server)
+		msg.Params = append(msg.Params, server)
 	}
-	raw += ""
-	n.queueOut <- raw
+	n.queueOut <- msg
 	return
 }
 
@@ -754,7 +756,7 @@ func (n *Network) Userhost(users []string) {
 		//todo cycle them 5-by-5?
 		return
 	}
-	n.queueOut <- fmt.Sprintf("USERHOST %s", strings.Join(users, " "))
+	n.queueOut <- &IrcMessage{"", "USERHOST", []string{strings.Join(users, " ")}}
 	//TODO: replies
 	//RPL_USERHOST                    ERR_NEEDMOREPARAMS
 	return
@@ -764,12 +766,25 @@ func (n *Network) Ison(users []string) {
 	if len(users) > 53 { //maximum number of nicks: 512/9 9 is max length of a nick
 		return
 	}
-	n.queueOut <- fmt.Sprintf("ISON %s", strings.Join(users, " "))
+	n.queueOut <- &IrcMessage{"", "ISON", []string{strings.Join(users, " ")}}
 	//TODO: replies
 	//RPL_ISON                ERR_NEEDMOREPARAMS
 	return
 }
 
-func (n *Network) SendRaw(msg string) {
-	n.queueOut <- msg
+func (n *Network) SendRaw(raw string) {
+	msg, err := PackMsg(raw)
+	if err == nil {
+		n.queueOut <- &msg
+	}
+}
+
+func (n *Network) SetPort(port string) {
+	n.port = port
+	n.Reconnect("Changing server.")
+}
+
+func (n *Network) SetNetwork(net string) {
+	n.network = net
+	n.Reconnect("Changing server.")
 }

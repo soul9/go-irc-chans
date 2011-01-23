@@ -8,11 +8,25 @@ import (
 
 //CTCP sucks, each client implements it a bit differently
 func (n *Network) ctcp() {
+	exch := make(chan bool, 0)
+	err := n.Shutdown.Reg(exch)
+	if err != nil {
+		return
+	}
 	ch := make(chan *IrcMessage)
 	n.Listen.RegListener("PRIVMSG", "ctcp", ch)
+	defer n.Listen.DelListener("PRIVMSG", "ctcp")
 	for !closed(ch) {
-		p := <-ch
-		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 {
+		var p *IrcMessage
+		select {
+		case p = <-ch:
+		case exit := <-exch:
+			if exit {
+				return
+			}
+			continue
+		}
+		if i := strings.LastIndex(p.Params[1], "\x01"); i > -1 { //FIXME: DCC?
 			p.Params[1] = strings.Trim(p.Params[1], "\x01")
 			ctype := p.Params[1]
 			dst := strings.Split(p.Prefix, "!", 2)[0]
@@ -41,7 +55,29 @@ func (n *Network) ctcp() {
 			}
 		}
 	}
-	n.l.Println("Something bad happened, ctcp returning")
-	n.Listen.DelListener("PRIVMSG", "ctcp")
 	return
+}
+
+func (n *Network) CtcpVersion(target string) {
+}
+
+func (n *Network) CtcpUserInfo(target string) {
+}
+
+func (n *Network) CtcpClientInfo(target string) {
+}
+
+func (n *Network) CtcpPing(target string) {
+}
+
+func (n *Network) CtcpTime(target string) {
+}
+
+func (n *Network) CtcpFinger(target string) {
+}
+
+func (n *Network) CtcpSource(target string) {
+}
+
+func (n *Network) CtcpAction(target string) {
 }

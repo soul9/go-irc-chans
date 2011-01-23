@@ -5,42 +5,67 @@ import (
 )
 
 func (n *Network) pinger() {
+	exch := make(chan bool, 0)
+	err := n.Shutdown.Reg(exch)
+	if err != nil {
+		return
+	}
+	ticker1 := time.NewTicker(minute)
+	defer ticker1.Stop()
+	ticker15 := time.NewTicker(minute * 15)
+	defer ticker15.Stop()
 	tick := make(chan *IrcMessage)
 	var lastMessage int64
 	n.Listen.RegListener("*", "ticker", tick)
-	for !closed(n.ticker1) && !closed(n.ticker15) && !closed(tick) {
+	defer n.Listen.DelListener("*", "ticker") //close channel and delete listener
+	for {
 		select {
-		case <-n.ticker1:
+		case <-ticker1.C:
 			if time.Seconds()-lastMessage >= 60*4 { //ping about every five minutes if there is no activity at all
 				n.Ping()
 				n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 			}
-		case <-n.ticker15:
+		case <-ticker15.C:
 			//Ping every 15 minutes.
 			n.Ping()
 			n.l.Printf("Network lag is: %d nanoseconds", n.lag)
 		case <-tick:
 			lastMessage = time.Seconds()
+		case exit := <-exch:
+			if exit {
+				return
+			}
+			continue
 		}
 	}
-	n.l.Println("Something went terribly wrong, pinger exiting")
-	n.Listen.DelListener("*", "ticker") //close channel and delete listener
 	return
 }
 
 func (n *Network) ponger() {
+	exch := make(chan bool, 0)
+	err := n.Shutdown.Reg(exch)
+	if err != nil {
+		return
+	}
 	pingch := make(chan *IrcMessage)
 	n.Listen.RegListener("PING", "ponger", pingch)
+	defer n.Listen.DelListener("PING", "ponger")
 	for !closed(pingch) {
-		p := <-pingch
-		if p == nil {
-			n.l.Println("Something bad happened, ponger returning")
-			break
+		select {
+		case p := <-pingch:
+			if p == nil {
+				n.l.Println("Something bad happened, ponger returning")
+				n.Disconnect("Software error")
+				return
+			}
+			n.Pong(p.Params[0])
+		case exit := <-exch:
+			if exit {
+				return
+			}
+			continue
 		}
-		n.Pong(p.Params[0])
 	}
-	n.Listen.DelListener("PING", "ponger")
-	n.l.Println("Something went terribly wrong, ponger exiting")
 	return
 }
 

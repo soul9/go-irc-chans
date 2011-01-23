@@ -75,6 +75,10 @@ func (m *IrcMessage) String() string {
 func (m *IrcMessage) Origin() map[string]string {
 	ret := make(map[string]string)
 	if m.Prefix != "" {
+		if strings.Index(m.Prefix, "!") == 0 {
+			ret["host"] = m.Prefix
+			return ret
+		}
 		tmp := strings.Split(m.Prefix, "!", 2)
 		ret["nick"] = tmp[0]
 		tmp = strings.Split(tmp[1], "@", 2)

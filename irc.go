@@ -32,18 +32,18 @@ var (
 type Network struct {
 	nick              string
 	user              string
-	network           string
+	network, port     string
 	server            string
 	realname          string
 	password          string
 	lag               int64
-	queueOut          chan string
+	queueOut          chan *IrcMessage
 	l                 *log.Logger
 	conn              net.Conn
 	Disconnected      bool
 	buf               *bufio.ReadWriter
-	ticker1, ticker15 <-chan int64
 	Listen, OutListen dispatchMap
+	Shutdown          shutdownDispatcher
 }
 
 
@@ -123,11 +123,11 @@ func (n *Network) Connect() os.Error {
 	}
 	tlsConfig, err := CustomTlsConf()
 	if err == nil {
-		n.conn, err = tls.Dial("tcp", "", n.network, tlsConfig)
+		n.conn, err = tls.Dial("tcp", "", strings.Join([]string{n.network, n.port}, ":"), tlsConfig)
 	}
 	if err != nil {
 		n.l.Println("Problem connecting using tls, trying plain-text")
-		n.conn, err = net.Dial("tcp", "", n.network)
+		n.conn, err = net.Dial("tcp", "", strings.Join([]string{n.network, n.port}, ":"))
 		if err != nil {
 			return os.NewError(fmt.Sprintf("Couldn't connect to network %s: %s.\n", n.network, err.String()))
 		}
@@ -137,73 +137,119 @@ func (n *Network) Connect() os.Error {
 	n.Disconnected = false
 	n.l.Printf("Connected to network %s, server %s\n", n.network, n.server)
 	go n.receiver()
+	go n.sender()
+	go n.pinger()
+	go n.ponger()
+	go n.ctcp()
 	err = n.Register()
 	if err != nil {
+		n.Disconnect("Error during connection")
 		return os.NewError(fmt.Sprintf("Couldn't register to network %s: %s.\n", n.network, err.String()))
 	}
 	n.Ping()
 	n.l.Printf("Network lag is: %d nanoseconds", n.lag)
-	if n.Disconnected == true {
-		return os.NewError("Unknown error, see logs")
-	}
 	return nil
 }
 
 func (n *Network) Reconnect(reason string) os.Error {
 	n.l.Printf("Connecting to irc network %s.\n", n.network)
-	n.Disconnect(reason)
+	if !n.Disconnected {
+		n.Disconnect(reason)
+	}
 	return n.Connect()
 }
 
 func (n *Network) Disconnect(reason string) {
 	if n.conn != nil {
 		n.Quit(reason)
-		time.Sleep(second) //sleep 1 second to send QUIT message
+		time.Sleep(second) //FIXME: sleep 1 second to send QUIT message
+		if rem := n.Shutdown.do(); rem != 0 {
+			if rem := n.Shutdown.do(); rem != 0 {
+				os.Exit(1)
+			}
+		}
 		n.conn.Close()
 	}
 	n.Disconnected = true
-	n.lag = second
+	n.lag = second * 3
 	return
 }
 
 func (n *Network) sender() {
+	exch := make(chan bool, 10)
+	err := n.Shutdown.Reg(exch)
+	if err != nil {
+		return
+	}
 	for {
-		msg := <-n.queueOut
-		m, err := PackMsg(msg)
-		if err == nil {
-			if n.conn == nil || n.buf == nil {
-				n.l.Printf("Error writing message (%s): No connection", msg)
-				continue
+		var msg *IrcMessage
+		select {
+		case msg = <-n.queueOut:
+		case exit := <-exch:
+			if exit {
+				return
 			}
-			_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg))
-			if err != nil {
-				n.l.Printf("Error writing to socket (%s): %s", err.String(), msg)
-				continue
-			}
-			err = n.buf.Flush()
-			if err != nil {
-				n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
-				continue
-			}
-			go n.OutListen.dispatch(m)
-		} else {
-			n.l.Println("Couldn't send malformed message: ", msg)
+			continue
 		}
+		if n.conn == nil || n.buf == nil {
+			n.l.Printf("Error writing message (%s): No connection", msg)
+			n.Disconnect("Connection error")
+			return
+		}
+		_, err = n.buf.WriteString(fmt.Sprintf("%s\r\n", msg.String()))
+		if err != nil {
+			n.l.Printf("Error writing to socket (%s): %s", err.String(), msg)
+			n.Disconnect("Connection error")
+			return
+		}
+		err = n.buf.Flush()
+		if err != nil {
+			n.l.Printf("Error flushing socket (%s): %s", err.String(), msg)
+			n.Disconnect("Connection error")
+			return
+		}
+		go n.OutListen.dispatch(*msg)
 	}
 	return
 }
 
 func (n *Network) receiver() {
+	exch := make(chan bool, 10)
+	err := n.Shutdown.Reg(exch)
+	if err != nil {
+		return
+	}
 	for {
 		if n.buf == nil {
 			n.Disconnect("Connection error")
 			return
 		}
-		l, err := n.buf.ReadString('\n')
-		if err != nil {
+		retch := make(chan string)
+		errch := make(chan os.Error)
+		go func(ch chan string, errch chan os.Error) {
+			l, err := n.buf.ReadString('\n')
+			if err != nil {
+				if !closed(errch) {
+					errch <- err
+				}
+			} else {
+				if !closed(ch) {
+					ch <- l
+				}
+			}
+		}(retch, errch)
+		var l string
+		select {
+		case exit := <-exch:
+			if exit {
+				return
+			}
+			continue
+		case err := <-errch:
 			n.l.Println("Can't read: socket: ", err.String())
 			n.Disconnect("Connection error")
 			return
+		case l = <-retch:
 		}
 		l = strings.TrimRight(l, "\r\n")
 		msg, err := PackMsg(l)
@@ -214,26 +260,25 @@ func (n *Network) receiver() {
 		//dispatch
 		go n.Listen.dispatch(msg)
 	}
-	n.l.Println("Something went terribly wrong, receiver exiting")
 	return
 }
 
-func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
+func NewNetwork(net, port, nick, usr, rn, pass, logfp string) *Network {
 	n := new(Network)
 	err := os.MkdirAll(confdir, 0751)
 	if err != nil {
 		log.Exitf("Couldn't create directory %s: %s", confdir, err.String())
 	}
 	n.network = net
+	n.port = port
 	n.password = pass
 	n.nick = nick
 	n.user = usr
 	n.realname = rn
 	n.Listen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
 	n.OutListen = dispatchMap{new(sync.RWMutex), make(map[string]map[string]chan *IrcMessage)}
-	n.queueOut = make(chan string, 100)
-	n.ticker1 = time.Tick(minute)       //Tick every minute.
-	n.ticker15 = time.Tick(minute * 15) //Tick every 15 minutes.
+	n.Shutdown = shutdownDispatcher{new(sync.Mutex), make([]chan bool, 0)}
+	n.queueOut = make(chan *IrcMessage, 100)
 	n.conn = nil
 	n.buf = nil
 	n.lag = second // initial lag of 1 second for all irc commands (a lot)
@@ -251,10 +296,6 @@ func NewNetwork(net, nick, usr, rn, pass, logfp string) *Network {
 			n.l = log.New(f, logprefix, logflags)
 		}
 	}
-	go n.sender()
-	go n.pinger()
-	go n.ponger()
-	go n.ctcp()
 	go n.logger()
 	return n
 }

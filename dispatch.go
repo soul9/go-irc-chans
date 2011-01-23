@@ -13,7 +13,7 @@ type dispatchMap struct {
 
 func (m *dispatchMap) RegListener(cmd, name string, ch chan *IrcMessage) os.Error {
 	m.lock.Lock()
-	defer func(m *dispatchMap) { m.lock.Unlock(); return }(m)
+	defer m.lock.Unlock()
 	if _, ok := m.chans[cmd]; !ok {
 		m.chans[cmd] = make(map[string]chan *IrcMessage)
 	} else if ch, ok := m.chans[cmd][name]; ok {
@@ -27,12 +27,14 @@ func (m *dispatchMap) RegListener(cmd, name string, ch chan *IrcMessage) os.Erro
 
 func (m *dispatchMap) DelListener(cmd, name string) os.Error {
 	m.lock.Lock()
-	defer func(m *dispatchMap) { m.lock.Unlock(); return }(m)
+	defer m.lock.Unlock()
 	if m.chans[cmd] == nil || m.chans[cmd][name] == nil {
 		return os.NewError(fmt.Sprintf("No such listener: %s for cmd %s", name, cmd))
 	}
 	if !closed(m.chans[cmd][name]) {
-		close(m.chans[cmd][name])
+		if msg, ok := <-m.chans[cmd][name]; msg != nil || ok {
+			close(m.chans[cmd][name])
+		}
 	}
 	m.chans[cmd][name] = nil, false
 	if len(m.chans[cmd]) == 0 {
@@ -51,4 +53,33 @@ func (m *dispatchMap) dispatch(msg IrcMessage) {
 	}
 	m.lock.RUnlock()
 	return
+}
+
+type shutdownDispatcher struct {
+	lock    *sync.Mutex
+	clients []chan bool
+}
+
+func (s *shutdownDispatcher) Reg(ch chan bool) os.Error {
+	if len(ch) > 0 {
+		return os.NewError("Need to pass synchronous channel for shutdown")
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.clients = append(s.clients, ch)
+	return nil
+}
+
+func (s *shutdownDispatcher) do() int {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	stale := 0
+	for i, _ := range s.clients {
+		ok := s.clients[i] <- true
+		if !ok {
+			stale++
+		}
+	}
+	s.clients = make([]chan bool, 0)
+	return stale
 }
