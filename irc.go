@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	VERSION = "go-irc-chans v0.1"
 	minute  = 1000 * 1000 * 1000 * 60
 	second  = minute / 60
 )
 
 var (
+	IRCVERSION = "go-irc-chans v0.1"  //customize this for any client
 	confdir    = os.Getenv("HOME") + "/.go-irc-chans"
 	tlsconfdir = confdir + "/tls"
 	certfile   = tlsconfdir + "/clientcert.pem"
@@ -162,7 +162,7 @@ func (n *Network) Reconnect(reason string) os.Error {
 func (n *Network) Disconnect(reason string) {
 	if n.conn != nil {
 		n.Quit(reason)
-		time.Sleep(second) //FIXME: sleep 1 second to send QUIT message
+		time.Sleep(timeout(n.lag)) //FIXME: sleep 1 second to send QUIT message
 		if rem := n.Shutdown.do(); rem != 0 {
 			if rem := n.Shutdown.do(); rem != 0 {
 				os.Exit(1)

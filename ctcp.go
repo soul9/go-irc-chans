@@ -32,7 +32,7 @@ func (n *Network) ctcp() {
 			dst := strings.Split(p.Prefix, "!", 2)[0]
 			switch {
 			case ctype == "VERSION":
-				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", VERSION))
+				n.Notice(dst, fmt.Sprintf("\x01VERSION %s\x01", IRCVERSION))
 			case ctype == "USERINFO":
 				n.Notice(dst, fmt.Sprintf("\x01USERINFO %s\x01", n.user))
 			case ctype == "CLIENTINFO":
