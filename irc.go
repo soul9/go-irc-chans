@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	minute  = 1000 * 1000 * 1000 * 60
-	second  = minute / 60
+	minute = 1000 * 1000 * 1000 * 60
+	second = minute / 60
 )
 
 var (
-	IRCVERSION = "go-irc-chans v0.1"  //customize this for any client
+	IRCVERSION = "go-irc-chans v0.1" //customize this for any client
 	confdir    = os.Getenv("HOME") + "/.go-irc-chans"
 	tlsconfdir = confdir + "/tls"
 	certfile   = tlsconfdir + "/clientcert.pem"

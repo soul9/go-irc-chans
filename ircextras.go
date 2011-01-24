@@ -788,3 +788,11 @@ func (n *Network) SetNetwork(net string) {
 	n.network = net
 	n.Reconnect("Changing server.")
 }
+
+func (n *Network) SetVersion(newversion string) {
+	IRCVERSION = newversion
+}
+
+func (n *Network) GetVersion() string {
+	return IRCVERSION
+}
