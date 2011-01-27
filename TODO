@@ -1,4 +1,6 @@
-Implement dispatching of outgoing messages too, as it will be needed for logging
 Ircextras.go can probably be simplified, needs to be extended
 testing testing testing
-rfc2812
+rfc2812...blah
+
+Nick changes by the server aren't picked up so GetNick will try the last set nick
+  - SetNick does pick up nickchange errors, but i.e. on freenode if you are using a registered nickname and don't auth the server will change your nick after a few seconds
