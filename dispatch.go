@@ -32,8 +32,10 @@ func (m *dispatchMap) DelListener(cmd, name string) os.Error {
 		return os.NewError(fmt.Sprintf("No such listener: %s for cmd %s", name, cmd))
 	}
 	if !closed(m.chans[cmd][name]) {
-		if msg, ok := <-m.chans[cmd][name]; msg != nil || ok {
+		select {
+		case <-m.chans[cmd][name]:
 			close(m.chans[cmd][name])
+		default:
 		}
 	}
 	m.chans[cmd][name] = nil, false
@@ -46,10 +48,20 @@ func (m *dispatchMap) DelListener(cmd, name string) os.Error {
 func (m *dispatchMap) dispatch(msg IrcMessage) {
 	m.lock.RLock()
 	for _, ch := range m.chans[msg.Cmd] {
-		_ = ch <- &msg
+		select {
+		case ch <- &msg:
+			continue
+		default:
+			continue
+		}
 	}
 	for _, ch := range m.chans["*"] {
-		_ = ch <- &msg
+		select {
+		case ch <- &msg:
+			continue
+		default:
+			continue
+		}
 	}
 	m.lock.RUnlock()
 	return
@@ -75,11 +87,13 @@ func (s *shutdownDispatcher) do() int {
 	defer s.lock.Unlock()
 	stale := 0
 	for i, _ := range s.clients {
-		ok := s.clients[i] <- true
-		if !ok {
+		select {
+		case s.clients[i] <- true:
+		default:
 			stale++
 		}
 	}
+	//BUG: what if some don't shut down?
 	s.clients = make([]chan bool, 0)
 	return stale
 }

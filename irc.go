@@ -50,7 +50,7 @@ type Network struct {
 func CustomTlsConf() (*tls.Config, os.Error) {
 	err := os.MkdirAll(tlsconfdir, 0751)
 	if err != nil {
-		log.Exitf("Couldn't create directory %s: %s", tlsconfdir, err.String())
+		log.Fatalf("Couldn't create directory %s: %s", tlsconfdir, err.String())
 	}
 	confexist := false
 	if s, err := os.Stat(certfile); err == nil && s.IsRegular() {
@@ -115,8 +115,13 @@ func (n *Network) Connect() os.Error {
 		return nil
 	}
 	var err os.Error
-	for _, ok := <-n.queueOut; ok; _, ok = <-n.queueOut { //empty the write channel so we don't send out-of-context messages
-		continue
+	for { //empty the write channel so we don't send out-of-context messages
+		select {
+		case <-n.queueOut:
+			continue
+		default:
+		}
+		break
 	}
 	if n.user == "" || n.nick == "" || n.realname == "" {
 		return os.NewError("Empty nick and/or user and/or real name")
@@ -267,7 +272,7 @@ func NewNetwork(net, port, nick, usr, rn, pass, logfp string) *Network {
 	n := new(Network)
 	err := os.MkdirAll(confdir, 0751)
 	if err != nil {
-		log.Exitf("Couldn't create directory %s: %s", confdir, err.String())
+		log.Fatalf("Couldn't create directory %s: %s", confdir, err.String())
 	}
 	n.network = net
 	n.port = port

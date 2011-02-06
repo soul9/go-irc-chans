@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"os"
-	"github.com/soul9/go-irc-chans" //ircchans
+	"github.com/soul9/go-irc-chans" //"../_obj/ircchans"
 	"log"
 	"time"
 	"fmt"
@@ -19,7 +19,7 @@ func main() {
 	passf := flag.String("pass", "", "Network Password")
 	nickf := flag.String("nick", "go-irc-chans", "Nickname on network")
 	userf := flag.String("user", "", "Irc user (defaults to nick)")
-	rnf := flag.String("realname", "go-ircfs", "Real Name (defaults to nick)")
+	rnf := flag.String("realname", "", "Real Name (defaults to nick)")
 	chans := flag.String("chans", "#go-nuts", "Channles to join separated by commas (e.g. #foo,#bar; defaults to #go-nuts)")
 	logfile := flag.String("logfile", "", "File used for logging (default: stderr)")
 	usage := flag.Bool("h", false, "Display usage and help message")
